@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClippyDo UI Performance</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #0a1725;
+      --bg-accent: #112b44;
+      --card: #0f2234;
+      --card-strong: #132a40;
+      --text: #eef3f8;
+      --muted: #9ab0c7;
+      --accent: #63d0a8;
+      --accent-2: #4fb3ff;
+      --accent-3: #ffb347;
+      --border: #1d344b;
+      --shadow: rgba(0, 0, 0, 0.25);
+    }
+    body {
+      font-family: "Bahnschrift", "Segoe UI", "Trebuchet MS", sans-serif;
+      margin: 0;
+      background: radial-gradient(circle at top, #132a40, var(--bg));
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      padding: 28px 24px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(135deg, #132a40, #0b1a2b);
+    }
+    h1 {
+      margin: 0 0 8px 0;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    p {
+      margin: 0;
+      color: var(--muted);
+    }
+    main {
+      padding: 24px;
+      display: grid;
+      gap: 18px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 12px 30px var(--shadow);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 12px;
+    }
+    .card h3 {
+      margin: 0 0 12px 0;
+      font-size: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+    }
+    .callout {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--card-strong);
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    .callout strong {
+      font-size: 18px;
+      color: var(--accent);
+    }
+    .meta-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    .meta-row span {
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(79, 179, 255, 0.14);
+      color: var(--accent-2);
+      border: 1px solid rgba(79, 179, 255, 0.3);
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 200px 200px;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .controls input,
+    .controls select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #0c1c2c;
+      color: var(--text);
+      font-size: 14px;
+    }
+    .chart {
+      width: 100%;
+      height: 260px;
+      background: #0c1c2c;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 12px;
+      box-sizing: border-box;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .metric {
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .metric small {
+      display: block;
+      color: var(--muted);
+      font-weight: 400;
+    }
+    .delta-up {
+      color: var(--accent-3);
+      font-weight: 600;
+    }
+    .delta-down {
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .sparkline {
+      width: 120px;
+      height: 40px;
+    }
+    .muted {
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ClippyDo UI Performance</h1>
+    <p>Performance history from UI test runs, visualized for trend tracking.</p>
+  </header>
+
+  <main>
+    <section class="grid">
+      <div class="card" id="latest-run">
+        <h3>Latest run</h3>
+        <div class="meta-row" id="latest-run-tags"></div>
+        <div class="callout">
+          <div>
+            <div id="latest-run-meta" class="muted">Loading...</div>
+            <div id="latest-run-detail" class="muted"></div>
+          </div>
+          <strong id="latest-run-duration">--</strong>
+        </div>
+      </div>
+      <div class="card" id="summary">
+        <h3>Run summary</h3>
+        <div class="callout">
+          <div>
+            <div class="muted">Samples</div>
+            <strong id="summary-samples">--</strong>
+          </div>
+          <div>
+            <div class="muted">Metrics</div>
+            <strong id="summary-metrics">--</strong>
+          </div>
+          <div>
+            <div class="muted">Runs</div>
+            <strong id="summary-runs">--</strong>
+          </div>
+          <div>
+            <div class="muted">Success rate</div>
+            <strong id="summary-success">--</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Metric focus</h3>
+      <div class="controls">
+        <input id="metric-filter" type="text" placeholder="Filter metrics by scenario or name">
+        <select id="sort-mode">
+          <option value="last">Sort by last</option>
+          <option value="p50">Sort by p50</option>
+          <option value="p95">Sort by p95</option>
+          <option value="max">Sort by max</option>
+        </select>
+        <select id="metric-selector"></select>
+      </div>
+      <div class="chart" id="focus-chart">Loading...</div>
+      <div id="focus-meta" class="muted"></div>
+    </section>
+
+    <section class="card">
+      <h3>Scenario metrics</h3>
+      <table>
+        <thead>
+        <tr>
+          <th>Scenario</th>
+          <th>Metric</th>
+          <th>Last (ms)</th>
+          <th>p50 (ms)</th>
+          <th>p95 (ms)</th>
+          <th>Max (ms)</th>
+          <th>Runs</th>
+          <th>Trend</th>
+          <th>History</th>
+        </tr>
+        </thead>
+        <tbody id="metrics-body">
+        <tr><td colspan="9">Loading...</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="dashboard.js" defer></script>
+</body>
+</html>
