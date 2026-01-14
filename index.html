@@ -156,6 +156,27 @@
     .muted {
       color: var(--muted);
     }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(99, 208, 168, 0.12);
+      color: var(--accent);
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .badge.warn {
+      background: rgba(255, 179, 71, 0.16);
+      color: var(--accent-3);
+    }
+    .badge.info {
+      background: rgba(79, 179, 255, 0.16);
+      color: var(--accent-2);
+    }
   </style>
 </head>
 <body>
@@ -234,6 +255,76 @@
         </thead>
         <tbody id="metrics-body">
         <tr><td colspan="9">Loading...</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h3>Test health</h3>
+      <div class="grid">
+        <div class="callout">
+          <div>
+            <div class="muted">Total tests</div>
+            <strong id="tests-total">--</strong>
+          </div>
+          <div>
+            <div class="muted">Pass rate</div>
+            <strong id="tests-pass-rate">--</strong>
+          </div>
+          <div>
+            <div class="muted">Retry saves</div>
+            <strong id="tests-retry-saves">--</strong>
+          </div>
+        </div>
+        <div class="callout">
+          <div>
+            <div class="muted">Latest run</div>
+            <strong id="tests-latest-summary">--</strong>
+          </div>
+          <div>
+            <div class="muted">Failing tests</div>
+            <strong id="tests-latest-fails">--</strong>
+          </div>
+          <div>
+            <div class="muted">Skipped</div>
+            <strong id="tests-latest-skips">--</strong>
+          </div>
+        </div>
+      </div>
+      <div class="chart" id="tests-run-chart">Loading...</div>
+      <div id="tests-run-meta" class="muted"></div>
+    </section>
+
+    <section class="card">
+      <h3>Flaky tests</h3>
+      <table>
+        <thead>
+        <tr>
+          <th>Test</th>
+          <th>Pass rate</th>
+          <th>Failures</th>
+          <th>Retry saves</th>
+          <th>Last outcome</th>
+        </tr>
+        </thead>
+        <tbody id="tests-flaky-body">
+        <tr><td colspan="5">Loading...</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h3>Top failure signatures</h3>
+      <table>
+        <thead>
+        <tr>
+          <th>Error summary</th>
+          <th>Count</th>
+          <th>Recent test</th>
+        </tr>
+        </thead>
+        <tbody id="tests-errors-body">
+        <tr><td colspan="3">Loading...</td></tr>
         </tbody>
       </table>
     </section>
