@@ -177,33 +177,6 @@
       background: rgba(79, 179, 255, 0.16);
       color: var(--accent-2);
     }
-    .legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 10px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-    .legend-item {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 8px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid var(--border);
-    }
-    .legend-swatch {
-      width: 14px;
-      height: 2px;
-      border-radius: 999px;
-    }
-    .note {
-      margin-top: 10px;
-      font-size: 12px;
-      color: var(--muted);
-    }
   </style>
 </head>
 <body>
@@ -261,7 +234,6 @@
         <select id="metric-selector"></select>
       </div>
       <div class="chart" id="focus-chart">Loading...</div>
-      <div id="focus-legend" class="legend"></div>
       <div id="focus-meta" class="muted"></div>
     </section>
 
@@ -273,21 +245,18 @@
           <th>Scenario</th>
           <th>Metric</th>
           <th>Last (ms)</th>
-          <th>Avg (ms)</th>
           <th>p50 (ms)</th>
           <th>p95 (ms)</th>
           <th>Max (ms)</th>
           <th>Runs</th>
-          <th>Delta (ms)</th>
-          <th>Trend (ms/run)</th>
+          <th>Trend</th>
           <th>History</th>
         </tr>
         </thead>
         <tbody id="metrics-body">
-        <tr><td colspan="11">Loading...</td></tr>
+        <tr><td colspan="9">Loading...</td></tr>
         </tbody>
       </table>
-      <div class="note">p50 is the median. p95 is the 95th percentile (tail latency). Trend is a linear regression slope in ms per run.</div>
     </section>
 
     <section class="card">
