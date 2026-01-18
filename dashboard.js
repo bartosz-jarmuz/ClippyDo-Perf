@@ -22,6 +22,7 @@
     sortMode: document.getElementById('sort-mode'),
     metricSelector: document.getElementById('metric-selector'),
     focusChart: document.getElementById('focus-chart'),
+    focusLegend: document.getElementById('focus-legend'),
     focusMeta: document.getElementById('focus-meta'),
     metricsBody: document.getElementById('metrics-body'),
     testsTotal: document.getElementById('tests-total'),
@@ -35,6 +36,18 @@
     testsFlakyBody: document.getElementById('tests-flaky-body'),
     testsErrorsBody: document.getElementById('tests-errors-body')
   };
+
+  const seriesPalette = [
+    '#63d0a8',
+    '#4fb3ff',
+    '#ffb347',
+    '#ff6b6b',
+    '#a78bfa',
+    '#00c2a8',
+    '#f97316',
+    '#22d3ee',
+    '#f472b6'
+  ];
 
   async function loadNdjson(path) {
     const response = await fetch(path, { cache: 'no-store' });
@@ -67,32 +80,143 @@
     return sorted[idx];
   }
 
+  function getColorForKey(key) {
+    let hash = 0;
+    for (let i = 0; i < key.length; i += 1) {
+      hash = ((hash << 5) - hash) + key.charCodeAt(i);
+      hash |= 0;
+    }
+    const index = Math.abs(hash) % seriesPalette.length;
+    return seriesPalette[index];
+  }
+
+  function toSentenceCase(value) {
+    const trimmed = value.trim();
+    if (!trimmed) return trimmed;
+    const lower = trimmed.toLowerCase();
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  }
+
+  function humanizeSegment(value) {
+    if (!value) return '';
+    const cleaned = value.replace(/_feature$/i, '').replace(/feature$/i, '');
+    const spaced = cleaned.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return toSentenceCase(spaced);
+  }
+
+  function formatScenarioLabel(rawScenario) {
+    if (!rawScenario) return '';
+    const parts = rawScenario.split('.').filter(Boolean);
+    if (parts.length >= 2) {
+      const classPart = humanizeSegment(parts[parts.length - 2]);
+      const methodPart = humanizeSegment(parts[parts.length - 1]);
+      if (classPart && methodPart) {
+        return `${classPart} - ${methodPart}`;
+      }
+      return classPart || methodPart || rawScenario;
+    }
+    return humanizeSegment(rawScenario);
+  }
+
+  function formatMetricLabel(rawMetric) {
+    return rawMetric || '';
+  }
+
+  function calculateAverage(values) {
+    if (values.length === 0) return 0;
+    const total = values.reduce((sum, value) => sum + value, 0);
+    return total / values.length;
+  }
+
+  function calculateTrendSlopePerRun(samples) {
+    if (samples.length < 2) return null;
+    const n = samples.length;
+    let sumX = 0;
+    let sumY = 0;
+    let sumXY = 0;
+    let sumX2 = 0;
+    for (let i = 0; i < n; i += 1) {
+      const x = i;
+      const y = samples[i].durationMs;
+      sumX += x;
+      sumY += y;
+      sumXY += x * y;
+      sumX2 += x * x;
+    }
+    const denominator = (n * sumX2) - (sumX * sumX);
+    if (denominator === 0) return null;
+    return ((n * sumXY) - (sumX * sumY)) / denominator;
+  }
+
+  function calculateTrendLine(samples) {
+    if (samples.length < 2) return null;
+    const n = samples.length;
+    let sumX = 0;
+    let sumY = 0;
+    let sumXY = 0;
+    let sumX2 = 0;
+    const xs = samples.map(sample => sample.timestampUtc.getTime());
+    const ys = samples.map(sample => sample.durationMs);
+    for (let i = 0; i < n; i += 1) {
+      const x = xs[i];
+      const y = ys[i];
+      sumX += x;
+      sumY += y;
+      sumXY += x * y;
+      sumX2 += x * x;
+    }
+    const denominator = (n * sumX2) - (sumX * sumX);
+    if (denominator === 0) return null;
+    const slope = ((n * sumXY) - (sumX * sumY)) / denominator;
+    const intercept = (sumY - (slope * sumX)) / n;
+    const startX = Math.min(...xs);
+    const endX = Math.max(...xs);
+    return {
+      startX,
+      endX,
+      startY: (slope * startX) + intercept,
+      endY: (slope * endX) + intercept
+    };
+  }
+
   function groupSamples(lines) {
     const groups = new Map();
     for (const line of lines) {
-      const key = `${line.scenario}::${line.metric}`;
+      const isAppLaunch = line.metric === 'app.launch';
+      const scenarioKey = isAppLaunch ? 'app.launch.aggregate' : line.scenario;
+      const scenarioLabel = isAppLaunch ? 'App launch (all scenarios)' : line.scenario;
+      const key = `${scenarioKey}::${line.metric}`;
       const values = groups.get(key) || [];
-      values.push(line);
+      values.push({ ...line, scenarioKey, scenarioLabel });
       groups.set(key, values);
     }
 
     const output = [];
     groups.forEach((samples, key) => {
+      samples.sort((a, b) => a.timestampUtc - b.timestampUtc);
       const durations = samples.map(s => s.durationMs).sort((a, b) => a - b);
       const last = samples[samples.length - 1];
       const prev = samples.length > 1 ? samples[samples.length - 2] : null;
-      const trend = prev ? last.durationMs - prev.durationMs : null;
+      const delta = prev ? last.durationMs - prev.durationMs : null;
+      const average = calculateAverage(durations);
+      const trendSlope = calculateTrendSlopePerRun(samples);
       output.push({
         key,
-        scenario: last.scenario,
+        scenario: last.scenarioLabel || last.scenario,
+        scenarioRaw: last.scenarioLabel || last.scenario,
         metric: last.metric,
+        scenarioLabel: formatScenarioLabel(last.scenarioLabel || last.scenario),
+        metricLabel: formatMetricLabel(last.metric),
         samples,
         durations,
         last,
         p50: percentile(durations, 50),
         p95: percentile(durations, 95),
+        average,
         max: durations[durations.length - 1] || 0,
-        trend
+        delta,
+        trendSlope,
+        color: getColorForKey(key)
       });
     });
 
@@ -238,6 +362,10 @@
   }
 
   function createSparkline(samples, width, height) {
+    return createSparklineWithColor(samples, width, height, '#4fb3ff');
+  }
+
+  function createSparklineWithColor(samples, width, height, strokeColor) {
     if (!samples || samples.length === 0) {
       return '<span class="muted">--</span>';
     }
@@ -254,7 +382,65 @@
 
     return `
       <svg class="sparkline" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
-        <polyline fill="none" stroke="#4fb3ff" stroke-width="2" points="${points.join(' ')}" />
+        <polyline fill="none" stroke="${strokeColor}" stroke-width="2" points="${points.join(' ')}" />
+      </svg>
+    `;
+  }
+
+  function createMultiLineChart(series, width, height) {
+    if (!series || series.length === 0) {
+      return '<div class="muted">No samples for this metric.</div>';
+    }
+
+    const padding = 28;
+    const innerWidth = width - padding * 2;
+    const innerHeight = height - padding * 2;
+    const allSamples = series.flatMap(entry => entry.samples);
+    if (allSamples.length === 0) {
+      return '<div class="muted">No samples for this metric.</div>';
+    }
+
+    const minTime = Math.min(...allSamples.map(sample => sample.timestampUtc.getTime()));
+    const maxTime = Math.max(...allSamples.map(sample => sample.timestampUtc.getTime()));
+    const minValue = Math.min(...allSamples.map(sample => sample.durationMs));
+    const maxValue = Math.max(...allSamples.map(sample => sample.durationMs));
+    const timeRange = Math.max(1, maxTime - minTime);
+    const valueRange = Math.max(1, maxValue - minValue);
+
+    const seriesMarkup = series.map(entry => {
+      const points = entry.samples.map(sample => {
+        const x = padding + ((sample.timestampUtc.getTime() - minTime) / timeRange) * innerWidth;
+        const y = padding + innerHeight - ((sample.durationMs - minValue) / valueRange) * innerHeight;
+        return { x, y, value: sample.durationMs };
+      });
+      const polyline = points.map(point => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ');
+      const trend = calculateTrendLine(entry.samples);
+      let trendMarkup = '';
+      if (trend) {
+        const startX = padding + ((trend.startX - minTime) / timeRange) * innerWidth;
+        const endX = padding + ((trend.endX - minTime) / timeRange) * innerWidth;
+        const startY = padding + innerHeight - ((trend.startY - minValue) / valueRange) * innerHeight;
+        const endY = padding + innerHeight - ((trend.endY - minValue) / valueRange) * innerHeight;
+        trendMarkup = `<line x1="${startX.toFixed(2)}" y1="${startY.toFixed(2)}" x2="${endX.toFixed(2)}" y2="${endY.toFixed(2)}" stroke="${entry.color}" stroke-width="2" stroke-dasharray="4 4" opacity="0.8" />`;
+      }
+      const highlight = entry.isSelected ? '3' : '2';
+      return `
+        <polyline fill="none" stroke="${entry.color}" stroke-width="${highlight}" points="${polyline}" />
+        ${trendMarkup}
+        ${points.map(point => `
+          <circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="${entry.isSelected ? 3 : 2}" fill="${entry.color}">
+            <title>${formatMs(point.value)} ms</title>
+          </circle>
+        `).join('')}
+      `;
+    }).join('');
+
+    return `
+      <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="width:100%;height:100%;">
+        <rect x="0" y="0" width="${width}" height="${height}" fill="transparent" />
+        ${seriesMarkup}
+        <text x="${padding}" y="${padding - 10}" fill="#9ab0c7" font-size="12">ms</text>
+        <text x="${padding}" y="${padding + innerHeight + 18}" fill="#9ab0c7" font-size="12">${formatMs(minValue)} ms</text>
       </svg>
     `;
   }
@@ -304,16 +490,40 @@
     `;
   }
 
-  function renderFocusChart(group) {
-    if (!group) {
+  function renderFocusChart(groups, selectedKey) {
+    let targetGroups = groups.slice(0, 8);
+    if (!targetGroups || targetGroups.length === 0) {
       elements.focusChart.innerHTML = '<div class="muted">No metric selected.</div>';
       elements.focusMeta.textContent = '';
+      elements.focusLegend.innerHTML = '';
       return;
     }
 
-    const samples = group.samples.map(sample => ({ value: sample.durationMs }));
-    elements.focusChart.innerHTML = createLineChart(samples, 800, 260, '#63d0a8', '#4fb3ff', 'ms', formatMs);
-    elements.focusMeta.textContent = `${group.scenario} / ${group.metric} | last ${formatMs(group.last.durationMs)} ms | p50 ${formatMs(group.p50)} ms | p95 ${formatMs(group.p95)} ms`;
+    const selectedGroup = groups.find(group => group.key === selectedKey);
+    if (selectedGroup && !targetGroups.some(group => group.key === selectedGroup.key)) {
+      targetGroups = [...targetGroups.slice(0, Math.max(0, targetGroups.length - 1)), selectedGroup];
+    }
+
+    const series = targetGroups.map(group => ({
+      key: group.key,
+      label: `${group.scenarioLabel} / ${group.metricLabel}`,
+      samples: group.samples,
+      color: group.color,
+      isSelected: group.key === selectedKey
+    }));
+
+    elements.focusChart.innerHTML = createMultiLineChart(series, 800, 260);
+
+    const selected = selectedGroup || groups[0];
+    const slopeText = selected.trendSlope === null ? '--' : `${selected.trendSlope > 0 ? '+' : ''}${formatMs(selected.trendSlope)} ms/run`;
+    elements.focusMeta.textContent = `${selected.scenarioLabel} / ${selected.metricLabel} | last ${formatMs(selected.last.durationMs)} ms | avg ${formatMs(selected.average)} ms | p50 ${formatMs(selected.p50)} ms | p95 ${formatMs(selected.p95)} ms | trend ${slopeText}`;
+
+    elements.focusLegend.innerHTML = series.map(entry => `
+      <div class="legend-item">
+        <span class="legend-swatch" style="background:${entry.color}"></span>
+        <span>${entry.label}</span>
+      </div>
+    `).join('');
   }
 
   function renderTable(groups) {
@@ -321,30 +531,34 @@
     body.innerHTML = '';
 
     if (groups.length === 0) {
-      body.innerHTML = '<tr><td colspan="9">No data</td></tr>';
+      body.innerHTML = '<tr><td colspan="11">No data</td></tr>';
       return;
     }
 
     for (const group of groups) {
-      const trend = group.trend;
-      const trendText = trend === null ? '--' : `${trend > 0 ? '+' : ''}${formatMs(trend)} ms`;
-      const trendClass = trend === null ? 'muted' : trend > 0 ? 'delta-up' : 'delta-down';
+      const delta = group.delta;
+      const deltaText = delta === null ? '--' : `${delta > 0 ? '+' : ''}${formatMs(delta)} ms`;
+      const deltaClass = delta === null ? 'muted' : delta > 0 ? 'delta-up' : 'delta-down';
+      const slopeText = group.trendSlope === null ? '--' : `${group.trendSlope > 0 ? '+' : ''}${formatMs(group.trendSlope)}`;
+      const slopeClass = group.trendSlope === null ? 'muted' : group.trendSlope > 0 ? 'delta-up' : 'delta-down';
       const row = document.createElement('tr');
       row.innerHTML = `
-        <td><span class="metric">${group.scenario}</span></td>
-        <td>${group.metric}</td>
+        <td><span class="metric"><span class="legend-swatch" style="background:${group.color}"></span>${group.scenarioLabel}</span></td>
+        <td>${group.metricLabel}</td>
         <td>${formatMs(group.last.durationMs)}</td>
+        <td>${formatMs(group.average)}</td>
         <td>${formatMs(group.p50)}</td>
         <td>${formatMs(group.p95)}</td>
         <td>${formatMs(group.max)}</td>
         <td>${group.samples.length}</td>
-        <td class="${trendClass}">${trendText}</td>
-        <td>${createSparkline(group.samples, 120, 40)}</td>
+        <td class="${deltaClass}">${deltaText}</td>
+        <td class="${slopeClass}">${slopeText}</td>
+        <td>${createSparklineWithColor(group.samples, 120, 40, group.color)}</td>
       `;
       row.addEventListener('click', () => {
         elements.metricSelector.value = group.key;
         state.selectedKey = group.key;
-        renderFocusChart(group);
+        renderFocusChart(state.filtered, group.key);
       });
       body.appendChild(row);
     }
@@ -357,6 +571,8 @@
 
     if (term) {
       filtered = filtered.filter(group =>
+        group.scenarioLabel.toLowerCase().includes(term) ||
+        group.metricLabel.toLowerCase().includes(term) ||
         group.scenario.toLowerCase().includes(term) ||
         group.metric.toLowerCase().includes(term));
     }
@@ -377,7 +593,8 @@
     }
 
     const selected = sorted.find(group => group.key === state.selectedKey) || sorted[0];
-    renderFocusChart(selected);
+    state.selectedKey = selected ? selected.key : null;
+    renderFocusChart(sorted, state.selectedKey);
   }
 
   function renderMetricSelector(groups) {
@@ -386,7 +603,7 @@
     for (const group of groups) {
       const option = document.createElement('option');
       option.value = group.key;
-      option.textContent = `${group.scenario} / ${group.metric}`;
+      option.textContent = `${group.scenarioLabel} / ${group.metricLabel}`;
       selector.appendChild(option);
     }
 
@@ -502,7 +719,7 @@
       applyFilters();
     } catch (err) {
       elements.latestRunMeta.textContent = err.message;
-      elements.metricsBody.innerHTML = '<tr><td colspan="9">No data</td></tr>';
+      elements.metricsBody.innerHTML = '<tr><td colspan="11">No data</td></tr>';
       elements.focusChart.innerHTML = '<div class="muted">No data</div>';
     }
 
@@ -532,7 +749,7 @@
   elements.metricSelector.addEventListener('change', () => {
     state.selectedKey = elements.metricSelector.value;
     const selected = state.groups.find(group => group.key === state.selectedKey);
-    renderFocusChart(selected);
+    renderFocusChart(state.filtered, selected ? selected.key : null);
   });
 
   init();
