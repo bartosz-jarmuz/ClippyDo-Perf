@@ -94,7 +94,7 @@
     }
     .controls {
       display: grid;
-      grid-template-columns: 1fr 200px 200px;
+      grid-template-columns: 1fr 200px 200px 160px;
       gap: 12px;
       margin-bottom: 12px;
     }
@@ -208,6 +208,15 @@
       font-size: 12px;
       color: var(--muted);
     }
+    .chart svg {
+      shape-rendering: geometricPrecision;
+    }
+    th {
+      cursor: pointer;
+    }
+    th.no-sort {
+      cursor: default;
+    }
   </style>
 </head>
 <body>
@@ -263,6 +272,12 @@
           <option value="max">Sort by max</option>
         </select>
         <select id="metric-selector"></select>
+        <select id="chart-window">
+          <option value="all">All runs</option>
+          <option value="10">Last 10</option>
+          <option value="20">Last 20</option>
+          <option value="50">Last 50</option>
+        </select>
       </div>
       <div class="chart" id="focus-chart">Loading...</div>
       <div id="focus-legend" class="legend"></div>
@@ -271,20 +286,20 @@
 
     <section class="card">
       <h3>Scenario metrics</h3>
-      <table>
+      <table id="metrics-table">
         <thead>
         <tr>
-          <th>Scenario</th>
-          <th>Metric</th>
-          <th>Last (ms)</th>
-          <th>Avg (ms)</th>
-          <th>p50 (ms)</th>
-          <th>p95 (ms)</th>
-          <th>Max (ms)</th>
-          <th>Runs</th>
-          <th>Delta (ms)</th>
-          <th>Trend (ms/run)</th>
-          <th>History</th>
+          <th data-sort="scenario" title="User-friendly scenario name. Click to sort alphabetically.">Scenario</th>
+          <th data-sort="metric" title="Metric identifier recorded during the test.">Metric</th>
+          <th data-sort="last" title="Most recent recorded duration in milliseconds.">Last (ms)</th>
+          <th data-sort="avg" title="Average duration across all samples in milliseconds.">Avg (ms)</th>
+          <th data-sort="p50" title="Median duration (50th percentile) in milliseconds.">p50 (ms)</th>
+          <th data-sort="p95" title="Slowest 5% boundary (95th percentile) in milliseconds.">p95 (ms)</th>
+          <th data-sort="max" title="Highest recorded duration in milliseconds.">Max (ms)</th>
+          <th data-sort="runs" title="Number of samples captured for this metric.">Runs</th>
+          <th data-sort="delta" title="Change between the last two samples in milliseconds.">Delta (ms)</th>
+          <th data-sort="trend" title="Linear trend slope in milliseconds per run.">Trend (ms/run)</th>
+          <th class="no-sort" title="Recent history sparkline.">History</th>
         </tr>
         </thead>
         <tbody id="metrics-body">
@@ -332,14 +347,14 @@
 
     <section class="card">
       <h3>Flaky tests</h3>
-      <table>
+      <table id="tests-flaky-table">
         <thead>
         <tr>
-          <th>Test</th>
-          <th>Pass rate</th>
-          <th>Failures</th>
-          <th>Retry saves</th>
-          <th>Last outcome</th>
+          <th data-sort="test" title="Test name with the highest failure or retry rate.">Test</th>
+          <th data-sort="passRate" title="Percent of runs that passed for this test.">Pass rate</th>
+          <th data-sort="failures" title="Count of failed runs for this test.">Failures</th>
+          <th data-sort="retry" title="Count of retries that turned failures into passes.">Retry saves</th>
+          <th data-sort="lastOutcome" title="Most recent outcome for this test.">Last outcome</th>
         </tr>
         </thead>
         <tbody id="tests-flaky-body">
@@ -350,12 +365,12 @@
 
     <section class="card">
       <h3>Top failure signatures</h3>
-      <table>
+      <table id="tests-errors-table">
         <thead>
         <tr>
-          <th>Error summary</th>
-          <th>Count</th>
-          <th>Recent test</th>
+          <th data-sort="error" title="Normalized error summary grouped across failures.">Error summary</th>
+          <th data-sort="count" title="Number of occurrences across all runs.">Count</th>
+          <th data-sort="recent" title="Most recent test that hit this failure.">Recent test</th>
         </tr>
         </thead>
         <tbody id="tests-errors-body">

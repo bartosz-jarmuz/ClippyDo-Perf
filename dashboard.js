@@ -4,6 +4,11 @@
     groups: [],
     filtered: [],
     selectedKey: null,
+    highlightedKeys: new Set(),
+    chartWindow: 'all',
+    metricSort: { key: 'last', dir: 'desc', source: 'dropdown' },
+    flakySort: { key: 'failures', dir: 'desc' },
+    errorsSort: { key: 'count', dir: 'desc' },
     testLines: [],
     testRuns: [],
     testGroups: []
@@ -21,10 +26,12 @@
     metricFilter: document.getElementById('metric-filter'),
     sortMode: document.getElementById('sort-mode'),
     metricSelector: document.getElementById('metric-selector'),
+    chartWindow: document.getElementById('chart-window'),
     focusChart: document.getElementById('focus-chart'),
     focusLegend: document.getElementById('focus-legend'),
     focusMeta: document.getElementById('focus-meta'),
     metricsBody: document.getElementById('metrics-body'),
+    metricsTable: document.getElementById('metrics-table'),
     testsTotal: document.getElementById('tests-total'),
     testsPassRate: document.getElementById('tests-pass-rate'),
     testsRetrySaves: document.getElementById('tests-retry-saves'),
@@ -34,7 +41,9 @@
     testsRunChart: document.getElementById('tests-run-chart'),
     testsRunMeta: document.getElementById('tests-run-meta'),
     testsFlakyBody: document.getElementById('tests-flaky-body'),
-    testsErrorsBody: document.getElementById('tests-errors-body')
+    testsErrorsBody: document.getElementById('tests-errors-body'),
+    testsFlakyTable: document.getElementById('tests-flaky-table'),
+    testsErrorsTable: document.getElementById('tests-errors-table')
   };
 
   const seriesPalette = [
@@ -155,10 +164,9 @@
     let sumY = 0;
     let sumXY = 0;
     let sumX2 = 0;
-    const xs = samples.map(sample => sample.timestampUtc.getTime());
     const ys = samples.map(sample => sample.durationMs);
     for (let i = 0; i < n; i += 1) {
-      const x = xs[i];
+      const x = i;
       const y = ys[i];
       sumX += x;
       sumY += y;
@@ -169,14 +177,95 @@
     if (denominator === 0) return null;
     const slope = ((n * sumXY) - (sumX * sumY)) / denominator;
     const intercept = (sumY - (slope * sumX)) / n;
-    const startX = Math.min(...xs);
-    const endX = Math.max(...xs);
+    const startX = 0;
+    const endX = n - 1;
     return {
       startX,
       endX,
       startY: (slope * startX) + intercept,
       endY: (slope * endX) + intercept
     };
+  }
+
+  function getChartWindowCount() {
+    if (state.chartWindow === 'all') return null;
+    const parsed = Number(state.chartWindow);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function sliceSamples(samples) {
+    const count = getChartWindowCount();
+    if (!count || samples.length <= count) return samples;
+    return samples.slice(samples.length - count);
+  }
+
+  function getMetricSortValue(group, key) {
+    switch (key) {
+      case 'scenario':
+        return group.scenarioLabel.toLowerCase();
+      case 'metric':
+        return group.metricLabel.toLowerCase();
+      case 'avg':
+        return group.average;
+      case 'p50':
+        return group.p50;
+      case 'p95':
+        return group.p95;
+      case 'max':
+        return group.max;
+      case 'runs':
+        return group.samples.length;
+      case 'delta':
+        return group.delta ?? Number.NEGATIVE_INFINITY;
+      case 'trend':
+        return group.trendSlope ?? Number.NEGATIVE_INFINITY;
+      case 'last':
+      default:
+        return group.last.durationMs;
+    }
+  }
+
+  function compareSortValues(aValue, bValue, dir) {
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      return dir === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+    }
+    const aNumber = Number.isFinite(aValue) ? aValue : Number.NEGATIVE_INFINITY;
+    const bNumber = Number.isFinite(bValue) ? bValue : Number.NEGATIVE_INFINITY;
+    return dir === 'asc' ? aNumber - bNumber : bNumber - aNumber;
+  }
+
+  function defaultSortDir(key) {
+    return ['scenario', 'metric', 'test', 'lastOutcome', 'error', 'recent'].includes(key) ? 'asc' : 'desc';
+  }
+
+  function getFlakySortValue(group, key) {
+    switch (key) {
+      case 'test':
+        return group.testName.toLowerCase();
+      case 'passRate':
+        return group.total === 0 ? 0 : group.passed / group.total;
+      case 'failures':
+        return group.failed;
+      case 'retry':
+        return group.retrySaved;
+      case 'lastOutcome':
+        return group.lastOutcome;
+      default:
+        return group.failed;
+    }
+  }
+
+  function getErrorSortValue(entry, key) {
+    switch (key) {
+      case 'error':
+        return entry.errorSummary.toLowerCase();
+      case 'count':
+        return entry.count;
+      case 'recent':
+        return entry.recentTest ? entry.recentTest.toLowerCase() : '';
+      default:
+        return entry.count;
+    }
   }
 
   function groupSamples(lines) {
@@ -400,35 +489,36 @@
       return '<div class="muted">No samples for this metric.</div>';
     }
 
-    const minTime = Math.min(...allSamples.map(sample => sample.timestampUtc.getTime()));
-    const maxTime = Math.max(...allSamples.map(sample => sample.timestampUtc.getTime()));
     const minValue = Math.min(...allSamples.map(sample => sample.durationMs));
     const maxValue = Math.max(...allSamples.map(sample => sample.durationMs));
-    const timeRange = Math.max(1, maxTime - minTime);
     const valueRange = Math.max(1, maxValue - minValue);
 
+    const snap = value => Math.round(value);
+
     const seriesMarkup = series.map(entry => {
-      const points = entry.samples.map(sample => {
-        const x = padding + ((sample.timestampUtc.getTime() - minTime) / timeRange) * innerWidth;
+      const total = entry.samples.length;
+      const points = entry.samples.map((sample, index) => {
+        const x = padding + (index / Math.max(1, total - 1)) * innerWidth;
         const y = padding + innerHeight - ((sample.durationMs - minValue) / valueRange) * innerHeight;
-        return { x, y, value: sample.durationMs };
+        return { x: snap(x), y: snap(y), value: sample.durationMs };
       });
-      const polyline = points.map(point => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ');
+      const polyline = points.map(point => `${point.x},${point.y}`).join(' ');
       const trend = calculateTrendLine(entry.samples);
       let trendMarkup = '';
       if (trend) {
-        const startX = padding + ((trend.startX - minTime) / timeRange) * innerWidth;
-        const endX = padding + ((trend.endX - minTime) / timeRange) * innerWidth;
+        const startX = padding + (trend.startX / Math.max(1, total - 1)) * innerWidth;
+        const endX = padding + (trend.endX / Math.max(1, total - 1)) * innerWidth;
         const startY = padding + innerHeight - ((trend.startY - minValue) / valueRange) * innerHeight;
         const endY = padding + innerHeight - ((trend.endY - minValue) / valueRange) * innerHeight;
-        trendMarkup = `<line x1="${startX.toFixed(2)}" y1="${startY.toFixed(2)}" x2="${endX.toFixed(2)}" y2="${endY.toFixed(2)}" stroke="${entry.color}" stroke-width="2" stroke-dasharray="4 4" opacity="0.8" />`;
+        trendMarkup = `<line x1="${snap(startX)}" y1="${snap(startY)}" x2="${snap(endX)}" y2="${snap(endY)}" stroke="${entry.color}" stroke-width="2" stroke-dasharray="4 4" opacity="${entry.opacity}" />`;
       }
       const highlight = entry.isSelected ? '3' : '2';
+      const opacity = entry.opacity;
       return `
-        <polyline fill="none" stroke="${entry.color}" stroke-width="${highlight}" points="${polyline}" />
+        <polyline fill="none" stroke="${entry.color}" stroke-width="${highlight}" points="${polyline}" opacity="${opacity}" stroke-linejoin="round" stroke-linecap="round" />
         ${trendMarkup}
         ${points.map(point => `
-          <circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="${entry.isSelected ? 3 : 2}" fill="${entry.color}">
+          <circle cx="${point.x}" cy="${point.y}" r="${entry.isSelected ? 3 : 2}" fill="${entry.color}" opacity="${opacity}">
             <title>${formatMs(point.value)} ms</title>
           </circle>
         `).join('')}
@@ -504,22 +594,32 @@
       targetGroups = [...targetGroups.slice(0, Math.max(0, targetGroups.length - 1)), selectedGroup];
     }
 
-    const series = targetGroups.map(group => ({
-      key: group.key,
-      label: `${group.scenarioLabel} / ${group.metricLabel}`,
-      samples: group.samples,
-      color: group.color,
-      isSelected: group.key === selectedKey
-    }));
+    const hasHighlights = state.highlightedKeys.size > 0;
+    const series = targetGroups.map(group => {
+      const isHighlighted = state.highlightedKeys.has(group.key);
+      const opacity = hasHighlights && !isHighlighted ? 0.15 : 1;
+      return {
+        key: group.key,
+        label: `${group.scenarioLabel} / ${group.metricLabel}`,
+        samples: sliceSamples(group.samples),
+        color: group.color,
+        isSelected: group.key === selectedKey,
+        isHighlighted,
+        opacity
+      };
+    });
 
     elements.focusChart.innerHTML = createMultiLineChart(series, 800, 260);
 
-    const selected = selectedGroup || groups[0];
+    const fallbackSelected = hasHighlights
+      ? targetGroups.find(group => state.highlightedKeys.has(group.key)) || targetGroups[0]
+      : targetGroups[0];
+    const selected = selectedGroup || fallbackSelected;
     const slopeText = selected.trendSlope === null ? '--' : `${selected.trendSlope > 0 ? '+' : ''}${formatMs(selected.trendSlope)} ms/run`;
     elements.focusMeta.textContent = `${selected.scenarioLabel} / ${selected.metricLabel} | last ${formatMs(selected.last.durationMs)} ms | avg ${formatMs(selected.average)} ms | p50 ${formatMs(selected.p50)} ms | p95 ${formatMs(selected.p95)} ms | trend ${slopeText}`;
 
     elements.focusLegend.innerHTML = series.map(entry => `
-      <div class="legend-item">
+      <div class="legend-item" data-key="${entry.key}" style="opacity:${entry.opacity}">
         <span class="legend-swatch" style="background:${entry.color}"></span>
         <span>${entry.label}</span>
       </div>
@@ -566,7 +666,6 @@
 
   function applyFilters() {
     const term = elements.metricFilter.value.trim().toLowerCase();
-    const sortMode = elements.sortMode.value;
     let filtered = state.groups;
 
     if (term) {
@@ -577,11 +676,12 @@
         group.metric.toLowerCase().includes(term));
     }
 
+    const sortKey = state.metricSort.key;
+    const sortDir = state.metricSort.dir;
     const sorted = [...filtered].sort((a, b) => {
-      if (sortMode === 'p50') return b.p50 - a.p50;
-      if (sortMode === 'p95') return b.p95 - a.p95;
-      if (sortMode === 'max') return b.max - a.max;
-      return b.last.durationMs - a.last.durationMs;
+      const aValue = getMetricSortValue(a, sortKey);
+      const bValue = getMetricSortValue(b, sortKey);
+      return compareSortValues(aValue, bValue, sortDir);
     });
 
     state.filtered = sorted;
@@ -659,12 +759,9 @@
     const candidates = groups
       .filter(group => group.failed > 0 || group.retrySaved > 0)
       .sort((a, b) => {
-        const aRate = a.total === 0 ? 0 : a.failed / a.total;
-        const bRate = b.total === 0 ? 0 : b.failed / b.total;
-        if (bRate !== aRate) {
-          return bRate - aRate;
-        }
-        return b.retrySaved - a.retrySaved;
+        const aValue = getFlakySortValue(a, state.flakySort.key);
+        const bValue = getFlakySortValue(b, state.flakySort.key);
+        return compareSortValues(aValue, bValue, state.flakySort.dir);
       })
       .slice(0, 12);
 
@@ -696,7 +793,13 @@
       return;
     }
 
-    for (const entry of errors) {
+    const sorted = [...errors].sort((a, b) => {
+      const aValue = getErrorSortValue(a, state.errorsSort.key);
+      const bValue = getErrorSortValue(b, state.errorsSort.key);
+      return compareSortValues(aValue, bValue, state.errorsSort.dir);
+    });
+
+    for (const entry of sorted) {
       const row = document.createElement('tr');
       row.innerHTML = `
         <td>${entry.errorSummary}</td>
@@ -705,6 +808,51 @@
       `;
       body.appendChild(row);
     }
+  }
+
+  function attachSortHandlers(table, onSort) {
+    if (!table) return;
+    table.querySelectorAll('th[data-sort]').forEach(header => {
+      header.addEventListener('click', () => {
+        const key = header.dataset.sort;
+        if (!key) return;
+        onSort(key);
+      });
+    });
+  }
+
+  function initSortableTables() {
+    attachSortHandlers(elements.metricsTable, key => {
+      const sameKey = state.metricSort.key === key;
+      state.metricSort = {
+        key,
+        dir: sameKey ? (state.metricSort.dir === 'asc' ? 'desc' : 'asc') : defaultSortDir(key),
+        source: 'header'
+      };
+      if (['last', 'p50', 'p95', 'max'].includes(key)) {
+        elements.sortMode.value = key;
+      }
+      applyFilters();
+    });
+
+    attachSortHandlers(elements.testsFlakyTable, key => {
+      const sameKey = state.flakySort.key === key;
+      state.flakySort = {
+        key,
+        dir: sameKey ? (state.flakySort.dir === 'asc' ? 'desc' : 'asc') : defaultSortDir(key)
+      };
+      renderFlakyTable(state.testGroups);
+    });
+
+    attachSortHandlers(elements.testsErrorsTable, key => {
+      const sameKey = state.errorsSort.key === key;
+      state.errorsSort = {
+        key,
+        dir: sameKey ? (state.errorsSort.dir === 'asc' ? 'desc' : 'asc') : defaultSortDir(key)
+      };
+      const errors = groupErrors(state.testLines);
+      renderErrorTable(errors);
+    });
   }
 
   async function init() {
@@ -745,12 +893,33 @@
   }
 
   elements.metricFilter.addEventListener('input', applyFilters);
-  elements.sortMode.addEventListener('change', applyFilters);
+  elements.sortMode.addEventListener('change', () => {
+    state.metricSort = { key: elements.sortMode.value, dir: 'desc', source: 'dropdown' };
+    applyFilters();
+  });
   elements.metricSelector.addEventListener('change', () => {
     state.selectedKey = elements.metricSelector.value;
     const selected = state.groups.find(group => group.key === state.selectedKey);
     renderFocusChart(state.filtered, selected ? selected.key : null);
   });
+  elements.chartWindow.addEventListener('change', () => {
+    state.chartWindow = elements.chartWindow.value;
+    renderFocusChart(state.filtered, state.selectedKey);
+  });
+  elements.focusLegend.addEventListener('click', event => {
+    const target = event.target.closest('.legend-item');
+    if (!target) return;
+    const key = target.dataset.key;
+    if (!key) return;
+    if (state.highlightedKeys.has(key)) {
+      state.highlightedKeys.delete(key);
+    } else {
+      state.highlightedKeys.add(key);
+    }
+    renderFocusChart(state.filtered, state.selectedKey);
+  });
 
+  state.metricSort = { key: elements.sortMode.value, dir: 'desc', source: 'dropdown' };
+  initSortableTables();
   init();
 })();
