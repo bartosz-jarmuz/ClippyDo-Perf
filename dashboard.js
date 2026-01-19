@@ -16,9 +16,7 @@
 
   const elements = {
     latestRunTags: document.getElementById('latest-run-tags'),
-    latestRunMeta: document.getElementById('latest-run-meta'),
-    latestRunDetail: document.getElementById('latest-run-detail'),
-    latestRunDuration: document.getElementById('latest-run-duration'),
+    latestRunList: document.getElementById('latest-run-list'),
     summarySamples: document.getElementById('summary-samples'),
     summaryMetrics: document.getElementById('summary-metrics'),
     summaryRuns: document.getElementById('summary-runs'),
@@ -409,17 +407,54 @@
     return `${Math.round(value)}%`;
   }
 
-  function renderLatestRun(lines) {
-    const sorted = [...lines].sort((a, b) => a.timestampUtc - b.timestampUtc);
-    const latest = sorted[sorted.length - 1];
+  function formatTimeAgo(timestamp) {
+    const now = Date.now();
+    const diffMs = Math.max(0, now - timestamp.getTime());
+    const minutes = Math.floor(diffMs / 60000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  }
+
+  function deriveRunStatus(samples, testLines) {
+    const hasSampleWarnings = samples.some(sample => String(sample.status || '').toLowerCase() !== 'passed');
+    const hasTestFailures = testLines.some(line => line.outcome === 'Failed');
+    if (hasSampleWarnings || hasTestFailures) {
+      return { label: 'Finished with warnings', badgeClass: 'badge warn' };
+    }
+    return { label: 'Succeeded', badgeClass: 'badge info' };
+  }
+
+  function groupRuns(lines) {
+    const runs = new Map();
+    for (const line of lines) {
+      const key = line.runId || 'run';
+      const entry = runs.get(key) || {
+        runId: key,
+        timestampUtc: line.timestampUtc,
+        branch: line.branch,
+        commit: line.commit,
+        samples: []
+      };
+      entry.samples.push(line);
+      entry.timestampUtc = line.timestampUtc > entry.timestampUtc ? line.timestampUtc : entry.timestampUtc;
+      entry.branch = line.branch || entry.branch;
+      entry.commit = line.commit || entry.commit;
+      runs.set(key, entry);
+    }
+    return [...runs.values()].sort((a, b) => a.timestampUtc - b.timestampUtc);
+  }
+
+  function renderLatestRun(lines, testLines) {
+    const runs = groupRuns(lines);
+    const latest = runs[runs.length - 1];
     if (!latest) {
-      elements.latestRunMeta.textContent = 'No data yet.';
+      elements.latestRunList.innerHTML = '<div class="muted">No data yet.</div>';
       return;
     }
-
-    const latestRunSamples = sorted.filter(x => x.runId === latest.runId);
-    const runDurations = latestRunSamples.map(s => s.durationMs).sort((a, b) => a - b);
-    const runP50 = percentile(runDurations, 50);
 
     elements.latestRunTags.innerHTML = '';
     ['branch', 'commit', 'run'].forEach(tag => {
@@ -434,9 +469,33 @@
       elements.latestRunTags.appendChild(span);
     });
 
-    elements.latestRunMeta.textContent = latest.timestampUtc.toISOString();
-    elements.latestRunDetail.textContent = `${latest.status || 'unknown'} | ${latest.runId || 'run'}`;
-    elements.latestRunDuration.textContent = `${formatMs(runP50)} ms p50`;
+    const byRunId = new Map();
+    for (const line of testLines || []) {
+      const key = line.runId || 'run';
+      const list = byRunId.get(key) || [];
+      list.push(line);
+      byRunId.set(key, list);
+    }
+
+    const recentRuns = runs.slice(Math.max(0, runs.length - 3)).reverse();
+    elements.latestRunList.innerHTML = recentRuns.map(run => {
+      const runDurations = run.samples.map(sample => sample.durationMs).sort((a, b) => a - b);
+      const runP50 = percentile(runDurations, 50);
+      const status = deriveRunStatus(run.samples, byRunId.get(run.runId) || []);
+      const when = `${formatTimeAgo(run.timestampUtc)} (${run.timestampUtc.toISOString()})`;
+      return `
+        <div class="run-row">
+          <div class="run-main">
+            <div class="run-meta">
+              <span class="${status.badgeClass}">${status.label}</span>
+              <span>${run.runId || 'run'}</span>
+            </div>
+            <div class="run-time">${when}</div>
+          </div>
+          <div class="run-details">p50 ${formatMs(runP50)} ms | ${run.samples.length} samples</div>
+        </div>
+      `;
+    }).join('');
   }
 
   function renderSummary(lines, groups) {
@@ -862,11 +921,11 @@
         throw new Error('No perf data yet.');
       }
       state.groups = groupSamples(state.lines);
-      renderLatestRun(state.lines);
+      renderLatestRun(state.lines, state.testLines);
       renderSummary(state.lines, state.groups);
       applyFilters();
     } catch (err) {
-      elements.latestRunMeta.textContent = err.message;
+      elements.latestRunList.innerHTML = `<div class="muted">${err.message}</div>`;
       elements.metricsBody.innerHTML = '<tr><td colspan="11">No data</td></tr>';
       elements.focusChart.innerHTML = '<div class="muted">No data</div>';
     }
@@ -879,6 +938,7 @@
       renderTestSummary(state.testLines, state.testRuns, state.testGroups);
       renderFlakyTable(state.testGroups);
       renderErrorTable(errors);
+      renderLatestRun(state.lines, state.testLines);
     } catch {
       elements.testsTotal.textContent = '--';
       elements.testsPassRate.textContent = '--';

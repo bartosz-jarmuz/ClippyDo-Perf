@@ -177,6 +177,40 @@
       background: rgba(79, 179, 255, 0.16);
       color: var(--accent-2);
     }
+    .run-list {
+      display: grid;
+      gap: 10px;
+    }
+    .run-row {
+      display: grid;
+      gap: 6px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card-strong);
+    }
+    .run-main {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .run-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 13px;
+    }
+    .run-time {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .run-details {
+      color: var(--muted);
+      font-size: 12px;
+    }
     .legend {
       display: flex;
       flex-wrap: wrap;
@@ -230,12 +264,8 @@
       <div class="card" id="latest-run">
         <h3>Latest run</h3>
         <div class="meta-row" id="latest-run-tags"></div>
-        <div class="callout">
-          <div>
-            <div id="latest-run-meta" class="muted">Loading...</div>
-            <div id="latest-run-detail" class="muted"></div>
-          </div>
-          <strong id="latest-run-duration">--</strong>
+        <div id="latest-run-list" class="run-list">
+          <div class="muted">Loading...</div>
         </div>
       </div>
       <div class="card" id="summary">
