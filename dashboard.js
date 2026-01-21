@@ -28,8 +28,16 @@
     focusChart: document.getElementById('focus-chart'),
     focusLegend: document.getElementById('focus-legend'),
     focusMeta: document.getElementById('focus-meta'),
-    metricsBody: document.getElementById('metrics-body'),
-    metricsTable: document.getElementById('metrics-table'),
+    metricsBodies: {
+      hot: document.getElementById('metrics-body-hot'),
+      medium: document.getElementById('metrics-body-medium'),
+      cold: document.getElementById('metrics-body-cold')
+    },
+    metricsTables: {
+      hot: document.getElementById('metrics-table-hot'),
+      medium: document.getElementById('metrics-table-medium'),
+      cold: document.getElementById('metrics-table-cold')
+    },
     testsTotal: document.getElementById('tests-total'),
     testsPassRate: document.getElementById('tests-pass-rate'),
     testsRetrySaves: document.getElementById('tests-retry-saves'),
@@ -266,6 +274,25 @@
     }
   }
 
+  function normalizeCategory(value) {
+    if (value === null || value === undefined) {
+      return 'medium';
+    }
+
+    if (typeof value === 'number') {
+      if (value === 0) return 'hot';
+      if (value === 1) return 'medium';
+      if (value === 2) return 'cold';
+    }
+
+    const normalized = String(value).trim().toLowerCase();
+    if (normalized === 'hot' || normalized === 'medium' || normalized === 'cold') {
+      return normalized;
+    }
+
+    return 'medium';
+  }
+
   function groupSamples(lines) {
     const groups = new Map();
     for (const line of lines) {
@@ -292,6 +319,7 @@
         scenario: last.scenarioLabel || last.scenario,
         scenarioRaw: last.scenarioLabel || last.scenario,
         metric: last.metric,
+        category: normalizeCategory(last.category),
         scenarioLabel: formatScenarioLabel(last.scenarioLabel || last.scenario),
         metricLabel: formatMetricLabel(last.metric),
         samples,
@@ -685,8 +713,7 @@
     `).join('');
   }
 
-  function renderTable(groups) {
-    const body = elements.metricsBody;
+  function renderTable(groups, body) {
     body.innerHTML = '';
 
     if (groups.length === 0) {
@@ -744,7 +771,9 @@
     });
 
     state.filtered = sorted;
-    renderTable(sorted);
+    renderTable(sorted.filter(group => group.category === 'hot'), elements.metricsBodies.hot);
+    renderTable(sorted.filter(group => group.category === 'medium'), elements.metricsBodies.medium);
+    renderTable(sorted.filter(group => group.category === 'cold'), elements.metricsBodies.cold);
     renderMetricSelector(sorted);
 
     if (!state.selectedKey && sorted.length > 0) {
@@ -881,17 +910,19 @@
   }
 
   function initSortableTables() {
-    attachSortHandlers(elements.metricsTable, key => {
-      const sameKey = state.metricSort.key === key;
-      state.metricSort = {
-        key,
-        dir: sameKey ? (state.metricSort.dir === 'asc' ? 'desc' : 'asc') : defaultSortDir(key),
-        source: 'header'
-      };
-      if (['last', 'p50', 'p95', 'max'].includes(key)) {
-        elements.sortMode.value = key;
-      }
-      applyFilters();
+    Object.values(elements.metricsTables).forEach(table => {
+      attachSortHandlers(table, key => {
+        const sameKey = state.metricSort.key === key;
+        state.metricSort = {
+          key,
+          dir: sameKey ? (state.metricSort.dir === 'asc' ? 'desc' : 'asc') : defaultSortDir(key),
+          source: 'header'
+        };
+        if (['last', 'p50', 'p95', 'max'].includes(key)) {
+          elements.sortMode.value = key;
+        }
+        applyFilters();
+      });
     });
 
     attachSortHandlers(elements.testsFlakyTable, key => {
@@ -926,7 +957,9 @@
       applyFilters();
     } catch (err) {
       elements.latestRunList.innerHTML = `<div class="muted">${err.message}</div>`;
-      elements.metricsBody.innerHTML = '<tr><td colspan="11">No data</td></tr>';
+      Object.values(elements.metricsBodies).forEach(body => {
+        body.innerHTML = '<tr><td colspan="11">No data</td></tr>';
+      });
       elements.focusChart.innerHTML = '<div class="muted">No data</div>';
     }
 

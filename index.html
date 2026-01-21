@@ -316,26 +316,77 @@
 
     <section class="card">
       <h3>Scenario metrics</h3>
-      <table id="metrics-table">
-        <thead>
-        <tr>
-          <th data-sort="scenario" title="User-friendly scenario name. Click to sort alphabetically.">Scenario</th>
-          <th data-sort="metric" title="Metric identifier recorded during the test.">Metric</th>
-          <th data-sort="last" title="Most recent recorded duration in milliseconds.">Last (ms)</th>
-          <th data-sort="avg" title="Average duration across all samples in milliseconds.">Avg (ms)</th>
-          <th data-sort="p50" title="Median duration (50th percentile) in milliseconds.">p50 (ms)</th>
-          <th data-sort="p95" title="Slowest 5% boundary (95th percentile) in milliseconds.">p95 (ms)</th>
-          <th data-sort="max" title="Highest recorded duration in milliseconds.">Max (ms)</th>
-          <th data-sort="runs" title="Number of samples captured for this metric.">Runs</th>
-          <th data-sort="delta" title="Change between the last two samples in milliseconds.">Delta (ms)</th>
-          <th data-sort="trend" title="Linear trend slope in milliseconds per run.">Trend (ms/run)</th>
-          <th class="no-sort" title="Recent history sparkline.">History</th>
-        </tr>
-        </thead>
-        <tbody id="metrics-body">
-        <tr><td colspan="11">Loading...</td></tr>
-        </tbody>
-      </table>
+      <div class="grid">
+        <div class="card">
+          <h3>Hot</h3>
+          <table id="metrics-table-hot">
+            <thead>
+            <tr>
+              <th data-sort="scenario" title="User-friendly scenario name. Click to sort alphabetically.">Scenario</th>
+              <th data-sort="metric" title="Metric identifier recorded during the test.">Metric</th>
+              <th data-sort="last" title="Most recent recorded duration in milliseconds.">Last (ms)</th>
+              <th data-sort="avg" title="Average duration across all samples in milliseconds.">Avg (ms)</th>
+              <th data-sort="p50" title="Median duration (50th percentile) in milliseconds.">p50 (ms)</th>
+              <th data-sort="p95" title="Slowest 5% boundary (95th percentile) in milliseconds.">p95 (ms)</th>
+              <th data-sort="max" title="Highest recorded duration in milliseconds.">Max (ms)</th>
+              <th data-sort="runs" title="Number of samples captured for this metric.">Runs</th>
+              <th data-sort="delta" title="Change between the last two samples in milliseconds.">Delta (ms)</th>
+              <th data-sort="trend" title="Linear trend slope in milliseconds per run.">Trend (ms/run)</th>
+              <th class="no-sort" title="Recent history sparkline.">History</th>
+            </tr>
+            </thead>
+            <tbody id="metrics-body-hot">
+            <tr><td colspan="11">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h3>Medium</h3>
+          <table id="metrics-table-medium">
+            <thead>
+            <tr>
+              <th data-sort="scenario" title="User-friendly scenario name. Click to sort alphabetically.">Scenario</th>
+              <th data-sort="metric" title="Metric identifier recorded during the test.">Metric</th>
+              <th data-sort="last" title="Most recent recorded duration in milliseconds.">Last (ms)</th>
+              <th data-sort="avg" title="Average duration across all samples in milliseconds.">Avg (ms)</th>
+              <th data-sort="p50" title="Median duration (50th percentile) in milliseconds.">p50 (ms)</th>
+              <th data-sort="p95" title="Slowest 5% boundary (95th percentile) in milliseconds.">p95 (ms)</th>
+              <th data-sort="max" title="Highest recorded duration in milliseconds.">Max (ms)</th>
+              <th data-sort="runs" title="Number of samples captured for this metric.">Runs</th>
+              <th data-sort="delta" title="Change between the last two samples in milliseconds.">Delta (ms)</th>
+              <th data-sort="trend" title="Linear trend slope in milliseconds per run.">Trend (ms/run)</th>
+              <th class="no-sort" title="Recent history sparkline.">History</th>
+            </tr>
+            </thead>
+            <tbody id="metrics-body-medium">
+            <tr><td colspan="11">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h3>Cold</h3>
+          <table id="metrics-table-cold">
+            <thead>
+            <tr>
+              <th data-sort="scenario" title="User-friendly scenario name. Click to sort alphabetically.">Scenario</th>
+              <th data-sort="metric" title="Metric identifier recorded during the test.">Metric</th>
+              <th data-sort="last" title="Most recent recorded duration in milliseconds.">Last (ms)</th>
+              <th data-sort="avg" title="Average duration across all samples in milliseconds.">Avg (ms)</th>
+              <th data-sort="p50" title="Median duration (50th percentile) in milliseconds.">p50 (ms)</th>
+              <th data-sort="p95" title="Slowest 5% boundary (95th percentile) in milliseconds.">p95 (ms)</th>
+              <th data-sort="max" title="Highest recorded duration in milliseconds.">Max (ms)</th>
+              <th data-sort="runs" title="Number of samples captured for this metric.">Runs</th>
+              <th data-sort="delta" title="Change between the last two samples in milliseconds.">Delta (ms)</th>
+              <th data-sort="trend" title="Linear trend slope in milliseconds per run.">Trend (ms/run)</th>
+              <th class="no-sort" title="Recent history sparkline.">History</th>
+            </tr>
+            </thead>
+            <tbody id="metrics-body-cold">
+            <tr><td colspan="11">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
       <div class="note">p50 is the median. p95 is the 95th percentile (tail latency). Trend is a linear regression slope in ms per run.</div>
     </section>
 
