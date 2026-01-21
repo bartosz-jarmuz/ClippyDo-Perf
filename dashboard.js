@@ -84,8 +84,15 @@
       .filter(Boolean)
       .map(sample => ({
         ...sample,
-        durationMs: Number(sample.durationMs) || 0,
-        timestampUtc: new Date(sample.timestampUtc)
+        scenario: sample.scenario ?? sample.Scenario,
+        metric: sample.metric ?? sample.Metric,
+        category: sample.category ?? sample.Category,
+        status: sample.status ?? sample.Status,
+        runId: sample.runId ?? sample.RunId,
+        branch: sample.branch ?? sample.Branch,
+        commit: sample.commit ?? sample.Commit,
+        durationMs: Number(sample.durationMs ?? sample.DurationMs) || 0,
+        timestampUtc: new Date(sample.timestampUtc ?? sample.TimestampUtc)
       }));
   }
 
@@ -744,6 +751,8 @@
       row.addEventListener('click', () => {
         elements.metricSelector.value = group.key;
         state.selectedKey = group.key;
+        state.highlightedKeys.clear();
+        state.highlightedKeys.add(group.key);
         renderFocusChart(state.filtered, group.key);
       });
       body.appendChild(row);

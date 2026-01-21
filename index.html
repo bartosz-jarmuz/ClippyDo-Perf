@@ -57,6 +57,9 @@
       grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
       gap: 12px;
     }
+    .metrics-stack {
+      grid-template-columns: 1fr;
+    }
     .card h3 {
       margin: 0 0 12px 0;
       font-size: 16px;
@@ -316,7 +319,7 @@
 
     <section class="card">
       <h3>Scenario metrics</h3>
-      <div class="grid">
+      <div class="grid metrics-stack">
         <div class="card">
           <h3>Hot</h3>
           <table id="metrics-table-hot">
