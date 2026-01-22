@@ -25,9 +25,21 @@
     sortMode: document.getElementById('sort-mode'),
     metricSelector: document.getElementById('metric-selector'),
     chartWindow: document.getElementById('chart-window'),
-    focusChart: document.getElementById('focus-chart'),
-    focusLegend: document.getElementById('focus-legend'),
-    focusMeta: document.getElementById('focus-meta'),
+    focusCharts: {
+      hot: document.getElementById('focus-chart-hot'),
+      medium: document.getElementById('focus-chart-medium'),
+      cold: document.getElementById('focus-chart-cold')
+    },
+    focusLegends: {
+      hot: document.getElementById('focus-legend-hot'),
+      medium: document.getElementById('focus-legend-medium'),
+      cold: document.getElementById('focus-legend-cold')
+    },
+    focusMeta: {
+      hot: document.getElementById('focus-meta-hot'),
+      medium: document.getElementById('focus-meta-medium'),
+      cold: document.getElementById('focus-meta-cold')
+    },
     metricsBodies: {
       hot: document.getElementById('metrics-body-hot'),
       medium: document.getElementById('metrics-body-medium'),
@@ -150,6 +162,13 @@
     return total / values.length;
   }
 
+  function calculateStandardDeviation(values) {
+    if (values.length === 0) return 0;
+    const average = calculateAverage(values);
+    const variance = values.reduce((sum, value) => sum + ((value - average) ** 2), 0) / values.length;
+    return Math.sqrt(variance);
+  }
+
   function calculateTrendSlopePerRun(samples) {
     if (samples.length < 2) return null;
     const n = samples.length;
@@ -224,6 +243,8 @@
         return group.p50;
       case 'p95':
         return group.p95;
+      case 'stdDev':
+        return group.stdDev;
       case 'max':
         return group.max;
       case 'runs':
@@ -320,6 +341,7 @@
       const prev = samples.length > 1 ? samples[samples.length - 2] : null;
       const delta = prev ? last.durationMs - prev.durationMs : null;
       const average = calculateAverage(durations);
+      const stdDev = calculateStandardDeviation(durations);
       const trendSlope = calculateTrendSlopePerRun(samples);
       output.push({
         key,
@@ -335,6 +357,7 @@
         p50: percentile(durations, 50),
         p95: percentile(durations, 95),
         average,
+        stdDev,
         max: durations[durations.length - 1] || 0,
         delta,
         trendSlope,
@@ -452,6 +475,23 @@
     if (hours < 24) return `${hours}h ago`;
     const days = Math.floor(hours / 24);
     return `${days}d ago`;
+  }
+
+  function buildYAxisTicks(minValue, maxValue, count) {
+    const safeCount = Math.max(2, count);
+    const range = maxValue - minValue;
+    if (range <= 0) {
+      return [{ value: minValue, ratio: 0 }, { value: maxValue, ratio: 1 }];
+    }
+    const ticks = [];
+    for (let i = 0; i < safeCount; i += 1) {
+      const ratio = i / (safeCount - 1);
+      ticks.push({
+        value: minValue + range * ratio,
+        ratio
+      });
+    }
+    return ticks;
   }
 
   function deriveRunStatus(samples, testLines) {
@@ -575,7 +615,7 @@
       return '<div class="muted">No samples for this metric.</div>';
     }
 
-    const padding = 28;
+    const padding = 34;
     const innerWidth = width - padding * 2;
     const innerHeight = height - padding * 2;
     const allSamples = series.flatMap(entry => entry.samples);
@@ -586,8 +626,18 @@
     const minValue = Math.min(...allSamples.map(sample => sample.durationMs));
     const maxValue = Math.max(...allSamples.map(sample => sample.durationMs));
     const valueRange = Math.max(1, maxValue - minValue);
+    const ticks = buildYAxisTicks(minValue, maxValue, 4);
 
     const snap = value => Math.round(value);
+
+    const axisMarkup = ticks.map(tick => {
+      const y = padding + innerHeight - (tick.ratio * innerHeight);
+      const label = `${formatMs(tick.value)} ms`;
+      return `
+        <line x1="${padding}" y1="${snap(y)}" x2="${padding + innerWidth}" y2="${snap(y)}" stroke="#1d344b" stroke-width="1" opacity="0.6" />
+        <text x="${padding - 8}" y="${snap(y) + 4}" fill="#9ab0c7" font-size="11" text-anchor="end">${label}</text>
+      `;
+    }).join('');
 
     const seriesMarkup = series.map(entry => {
       const total = entry.samples.length;
@@ -622,9 +672,9 @@
     return `
       <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="width:100%;height:100%;">
         <rect x="0" y="0" width="${width}" height="${height}" fill="transparent" />
+        ${axisMarkup}
         ${seriesMarkup}
         <text x="${padding}" y="${padding - 10}" fill="#9ab0c7" font-size="12">ms</text>
-        <text x="${padding}" y="${padding + innerHeight + 18}" fill="#9ab0c7" font-size="12">${formatMs(minValue)} ms</text>
       </svg>
     `;
   }
@@ -636,13 +686,14 @@
 
     const formatValue = formatter || formatMs;
     const safeId = String(label).replace(/[^a-z0-9_-]/gi, '');
-    const padding = 28;
+    const padding = 34;
     const innerWidth = width - padding * 2;
     const innerHeight = height - padding * 2;
     const values = samples.map(s => s.value);
     const min = Math.min(...values);
     const max = Math.max(...values);
     const range = Math.max(1, max - min);
+    const ticks = buildYAxisTicks(min, max, 4);
     const points = values.map((value, index) => {
       const x = padding + (index / Math.max(1, values.length - 1)) * innerWidth;
       const y = padding + innerHeight - ((value - min) / range) * innerHeight;
@@ -651,6 +702,14 @@
 
     const polyPoints = points.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
     const areaPoints = `${padding},${padding + innerHeight} ${polyPoints} ${padding + innerWidth},${padding + innerHeight}`;
+    const axisMarkup = ticks.map(tick => {
+      const y = padding + innerHeight - (tick.ratio * innerHeight);
+      const labelText = formatValue(tick.value);
+      return `
+        <line x1="${padding}" y1="${y.toFixed(2)}" x2="${padding + innerWidth}" y2="${y.toFixed(2)}" stroke="#1d344b" stroke-width="1" opacity="0.6" />
+        <text x="${padding - 8}" y="${(y + 4).toFixed(2)}" fill="#9ab0c7" font-size="11" text-anchor="end">${labelText}</text>
+      `;
+    }).join('');
 
     return `
       <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" style="width:100%;height:100%;">
@@ -661,6 +720,7 @@
           </linearGradient>
         </defs>
         <rect x="0" y="0" width="${width}" height="${height}" fill="transparent" />
+        ${axisMarkup}
         <polyline fill="url(#fill-gradient-${safeId})" stroke="none" points="${areaPoints}" />
         <polyline fill="none" stroke="${strokeColor}" stroke-width="2" points="${polyPoints}" />
         ${points.map(p => `
@@ -669,21 +729,25 @@
           </circle>
         `).join('')}
         <text x="${padding}" y="${padding - 10}" fill="#9ab0c7" font-size="12">${label}</text>
-        <text x="${padding}" y="${padding + innerHeight + 18}" fill="#9ab0c7" font-size="12">${formatValue(min)}</text>
       </svg>
     `;
   }
 
-  function renderFocusChart(groups, selectedKey) {
-    let targetGroups = groups.slice(0, 8);
+  function renderFocusChartForCategory(groups, selectedKey, category) {
+    const chart = elements.focusCharts[category];
+    const legend = elements.focusLegends[category];
+    const meta = elements.focusMeta[category];
+    const categoryGroups = groups.filter(group => group.category === category);
+    let targetGroups = categoryGroups.slice(0, 6);
+
     if (!targetGroups || targetGroups.length === 0) {
-      elements.focusChart.innerHTML = '<div class="muted">No metric selected.</div>';
-      elements.focusMeta.textContent = '';
-      elements.focusLegend.innerHTML = '';
+      chart.innerHTML = '<div class="muted">No metrics.</div>';
+      legend.innerHTML = '';
+      meta.textContent = '';
       return;
     }
 
-    const selectedGroup = groups.find(group => group.key === selectedKey);
+    const selectedGroup = categoryGroups.find(group => group.key === selectedKey);
     if (selectedGroup && !targetGroups.some(group => group.key === selectedGroup.key)) {
       targetGroups = [...targetGroups.slice(0, Math.max(0, targetGroups.length - 1)), selectedGroup];
     }
@@ -703,16 +767,16 @@
       };
     });
 
-    elements.focusChart.innerHTML = createMultiLineChart(series, 800, 260);
+    chart.innerHTML = createMultiLineChart(series, 800, 260);
 
     const fallbackSelected = hasHighlights
       ? targetGroups.find(group => state.highlightedKeys.has(group.key)) || targetGroups[0]
       : targetGroups[0];
     const selected = selectedGroup || fallbackSelected;
     const slopeText = selected.trendSlope === null ? '--' : `${selected.trendSlope > 0 ? '+' : ''}${formatMs(selected.trendSlope)} ms/run`;
-    elements.focusMeta.textContent = `${selected.scenarioLabel} / ${selected.metricLabel} | last ${formatMs(selected.last.durationMs)} ms | avg ${formatMs(selected.average)} ms | p50 ${formatMs(selected.p50)} ms | p95 ${formatMs(selected.p95)} ms | trend ${slopeText}`;
+    meta.textContent = `${selected.scenarioLabel} / ${selected.metricLabel} | last ${formatMs(selected.last.durationMs)} ms | avg ${formatMs(selected.average)} ms | p50 ${formatMs(selected.p50)} ms | p95 ${formatMs(selected.p95)} ms | std dev ${formatMs(selected.stdDev)} ms | trend ${slopeText}`;
 
-    elements.focusLegend.innerHTML = series.map(entry => `
+    legend.innerHTML = series.map(entry => `
       <div class="legend-item" data-key="${entry.key}" style="opacity:${entry.opacity}">
         <span class="legend-swatch" style="background:${entry.color}"></span>
         <span>${entry.label}</span>
@@ -720,11 +784,17 @@
     `).join('');
   }
 
+  function renderFocusCharts(groups, selectedKey) {
+    renderFocusChartForCategory(groups, selectedKey, 'hot');
+    renderFocusChartForCategory(groups, selectedKey, 'medium');
+    renderFocusChartForCategory(groups, selectedKey, 'cold');
+  }
+
   function renderTable(groups, body) {
     body.innerHTML = '';
 
     if (groups.length === 0) {
-      body.innerHTML = '<tr><td colspan="11">No data</td></tr>';
+      body.innerHTML = '<tr><td colspan="12">No data</td></tr>';
       return;
     }
 
@@ -742,6 +812,7 @@
         <td>${formatMs(group.average)}</td>
         <td>${formatMs(group.p50)}</td>
         <td>${formatMs(group.p95)}</td>
+        <td>${formatMs(group.stdDev)}</td>
         <td>${formatMs(group.max)}</td>
         <td>${group.samples.length}</td>
         <td class="${deltaClass}">${deltaText}</td>
@@ -753,7 +824,7 @@
         state.selectedKey = group.key;
         state.highlightedKeys.clear();
         state.highlightedKeys.add(group.key);
-        renderFocusChart(state.filtered, group.key);
+        renderFocusCharts(state.filtered, group.key);
       });
       body.appendChild(row);
     }
@@ -791,7 +862,7 @@
 
     const selected = sorted.find(group => group.key === state.selectedKey) || sorted[0];
     state.selectedKey = selected ? selected.key : null;
-    renderFocusChart(sorted, state.selectedKey);
+    renderFocusCharts(sorted, state.selectedKey);
   }
 
   function renderMetricSelector(groups) {
@@ -967,9 +1038,11 @@
     } catch (err) {
       elements.latestRunList.innerHTML = `<div class="muted">${err.message}</div>`;
       Object.values(elements.metricsBodies).forEach(body => {
-        body.innerHTML = '<tr><td colspan="11">No data</td></tr>';
+        body.innerHTML = '<tr><td colspan="12">No data</td></tr>';
       });
-      elements.focusChart.innerHTML = '<div class="muted">No data</div>';
+      Object.values(elements.focusCharts).forEach(chart => {
+        chart.innerHTML = '<div class="muted">No data</div>';
+      });
     }
 
     try {
@@ -1002,23 +1075,25 @@
   elements.metricSelector.addEventListener('change', () => {
     state.selectedKey = elements.metricSelector.value;
     const selected = state.groups.find(group => group.key === state.selectedKey);
-    renderFocusChart(state.filtered, selected ? selected.key : null);
+    renderFocusCharts(state.filtered, selected ? selected.key : null);
   });
   elements.chartWindow.addEventListener('change', () => {
     state.chartWindow = elements.chartWindow.value;
-    renderFocusChart(state.filtered, state.selectedKey);
+    renderFocusCharts(state.filtered, state.selectedKey);
   });
-  elements.focusLegend.addEventListener('click', event => {
-    const target = event.target.closest('.legend-item');
-    if (!target) return;
-    const key = target.dataset.key;
-    if (!key) return;
-    if (state.highlightedKeys.has(key)) {
-      state.highlightedKeys.delete(key);
-    } else {
-      state.highlightedKeys.add(key);
-    }
-    renderFocusChart(state.filtered, state.selectedKey);
+  Object.values(elements.focusLegends).forEach(legend => {
+    legend.addEventListener('click', event => {
+      const target = event.target.closest('.legend-item');
+      if (!target) return;
+      const key = target.dataset.key;
+      if (!key) return;
+      if (state.highlightedKeys.has(key)) {
+        state.highlightedKeys.delete(key);
+      } else {
+        state.highlightedKeys.add(key);
+      }
+      renderFocusCharts(state.filtered, state.selectedKey);
+    });
   });
 
   state.metricSort = { key: elements.sortMode.value, dir: 'desc', source: 'dropdown' };

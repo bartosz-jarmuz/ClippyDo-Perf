@@ -120,6 +120,21 @@
       padding: 12px;
       box-sizing: border-box;
     }
+    .focus-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .focus-panel {
+      display: grid;
+      gap: 10px;
+    }
+    .focus-title {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+    }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -312,9 +327,26 @@
           <option value="50">Last 50</option>
         </select>
       </div>
-      <div class="chart" id="focus-chart">Loading...</div>
-      <div id="focus-legend" class="legend"></div>
-      <div id="focus-meta" class="muted"></div>
+      <div class="focus-row">
+        <div class="focus-panel">
+          <div class="focus-title">Hot</div>
+          <div class="chart" id="focus-chart-hot">Loading...</div>
+          <div id="focus-legend-hot" class="legend"></div>
+          <div id="focus-meta-hot" class="muted"></div>
+        </div>
+        <div class="focus-panel">
+          <div class="focus-title">Medium</div>
+          <div class="chart" id="focus-chart-medium">Loading...</div>
+          <div id="focus-legend-medium" class="legend"></div>
+          <div id="focus-meta-medium" class="muted"></div>
+        </div>
+        <div class="focus-panel">
+          <div class="focus-title">Cold</div>
+          <div class="chart" id="focus-chart-cold">Loading...</div>
+          <div id="focus-legend-cold" class="legend"></div>
+          <div id="focus-meta-cold" class="muted"></div>
+        </div>
+      </div>
     </section>
 
     <section class="card">
@@ -331,6 +363,7 @@
               <th data-sort="avg" title="Average duration across all samples in milliseconds.">Avg (ms)</th>
               <th data-sort="p50" title="Median duration (50th percentile) in milliseconds.">p50 (ms)</th>
               <th data-sort="p95" title="Slowest 5% boundary (95th percentile) in milliseconds.">p95 (ms)</th>
+              <th data-sort="stdDev" title="Standard deviation in milliseconds.">Std dev (ms)</th>
               <th data-sort="max" title="Highest recorded duration in milliseconds.">Max (ms)</th>
               <th data-sort="runs" title="Number of samples captured for this metric.">Runs</th>
               <th data-sort="delta" title="Change between the last two samples in milliseconds.">Delta (ms)</th>
@@ -339,7 +372,7 @@
             </tr>
             </thead>
             <tbody id="metrics-body-hot">
-            <tr><td colspan="11">Loading...</td></tr>
+            <tr><td colspan="12">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -354,6 +387,7 @@
               <th data-sort="avg" title="Average duration across all samples in milliseconds.">Avg (ms)</th>
               <th data-sort="p50" title="Median duration (50th percentile) in milliseconds.">p50 (ms)</th>
               <th data-sort="p95" title="Slowest 5% boundary (95th percentile) in milliseconds.">p95 (ms)</th>
+              <th data-sort="stdDev" title="Standard deviation in milliseconds.">Std dev (ms)</th>
               <th data-sort="max" title="Highest recorded duration in milliseconds.">Max (ms)</th>
               <th data-sort="runs" title="Number of samples captured for this metric.">Runs</th>
               <th data-sort="delta" title="Change between the last two samples in milliseconds.">Delta (ms)</th>
@@ -362,7 +396,7 @@
             </tr>
             </thead>
             <tbody id="metrics-body-medium">
-            <tr><td colspan="11">Loading...</td></tr>
+            <tr><td colspan="12">Loading...</td></tr>
             </tbody>
           </table>
         </div>
@@ -377,6 +411,7 @@
               <th data-sort="avg" title="Average duration across all samples in milliseconds.">Avg (ms)</th>
               <th data-sort="p50" title="Median duration (50th percentile) in milliseconds.">p50 (ms)</th>
               <th data-sort="p95" title="Slowest 5% boundary (95th percentile) in milliseconds.">p95 (ms)</th>
+              <th data-sort="stdDev" title="Standard deviation in milliseconds.">Std dev (ms)</th>
               <th data-sort="max" title="Highest recorded duration in milliseconds.">Max (ms)</th>
               <th data-sort="runs" title="Number of samples captured for this metric.">Runs</th>
               <th data-sort="delta" title="Change between the last two samples in milliseconds.">Delta (ms)</th>
@@ -385,12 +420,12 @@
             </tr>
             </thead>
             <tbody id="metrics-body-cold">
-            <tr><td colspan="11">Loading...</td></tr>
+            <tr><td colspan="12">Loading...</td></tr>
             </tbody>
           </table>
         </div>
       </div>
-      <div class="note">p50 is the median. p95 is the 95th percentile (tail latency). Trend is a linear regression slope in ms per run.</div>
+      <div class="note">p50 is the median. p95 is the 95th percentile (tail latency). Std dev shows dispersion. Trend is a linear regression slope in ms per run.</div>
     </section>
 
     <section class="card">
