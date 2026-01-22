@@ -615,7 +615,7 @@
       return '<div class="muted">No samples for this metric.</div>';
     }
 
-    const padding = 34;
+    const padding = 46;
     const innerWidth = width - padding * 2;
     const innerHeight = height - padding * 2;
     const allSamples = series.flatMap(entry => entry.samples);
@@ -630,12 +630,13 @@
 
     const snap = value => Math.round(value);
 
+    const axisLabelOffset = 6;
     const axisMarkup = ticks.map(tick => {
       const y = padding + innerHeight - (tick.ratio * innerHeight);
       const label = `${formatMs(tick.value)} ms`;
       return `
         <line x1="${padding}" y1="${snap(y)}" x2="${padding + innerWidth}" y2="${snap(y)}" stroke="#1d344b" stroke-width="1" opacity="0.6" />
-        <text x="${padding - 8}" y="${snap(y) + 4}" fill="#9ab0c7" font-size="11" text-anchor="end">${label}</text>
+        <text x="${padding - axisLabelOffset}" y="${snap(y) + 4}" fill="#9ab0c7" font-size="11" text-anchor="end">${label}</text>
       `;
     }).join('');
 
@@ -686,7 +687,7 @@
 
     const formatValue = formatter || formatMs;
     const safeId = String(label).replace(/[^a-z0-9_-]/gi, '');
-    const padding = 34;
+    const padding = 46;
     const innerWidth = width - padding * 2;
     const innerHeight = height - padding * 2;
     const values = samples.map(s => s.value);
@@ -702,12 +703,13 @@
 
     const polyPoints = points.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
     const areaPoints = `${padding},${padding + innerHeight} ${polyPoints} ${padding + innerWidth},${padding + innerHeight}`;
+    const axisLabelOffset = 6;
     const axisMarkup = ticks.map(tick => {
       const y = padding + innerHeight - (tick.ratio * innerHeight);
       const labelText = formatValue(tick.value);
       return `
         <line x1="${padding}" y1="${y.toFixed(2)}" x2="${padding + innerWidth}" y2="${y.toFixed(2)}" stroke="#1d344b" stroke-width="1" opacity="0.6" />
-        <text x="${padding - 8}" y="${(y + 4).toFixed(2)}" fill="#9ab0c7" font-size="11" text-anchor="end">${labelText}</text>
+        <text x="${padding - axisLabelOffset}" y="${(y + 4).toFixed(2)}" fill="#9ab0c7" font-size="11" text-anchor="end">${labelText}</text>
       `;
     }).join('');
 
