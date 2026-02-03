@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ClippyDo UI Performance</title>
+  <title>ClippyDo Performance</title>
   <style>
     :root {
       color-scheme: light;
@@ -97,7 +97,7 @@
     }
     .controls {
       display: grid;
-      grid-template-columns: 1fr 200px 200px 160px;
+      grid-template-columns: 1fr 180px 180px 160px;
       gap: 12px;
       margin-bottom: 12px;
     }
@@ -255,6 +255,17 @@
     .metric .legend-swatch {
       margin-right: 6px;
     }
+    .group-row td {
+      background: #0c1c2c;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .group-row td strong {
+      color: var(--accent-2);
+      font-weight: 600;
+    }
     .note {
       margin-top: 10px;
       font-size: 12px;
@@ -273,8 +284,8 @@
 </head>
 <body>
   <header>
-    <h1>ClippyDo UI Performance</h1>
-    <p>Performance history from UI test runs, visualized for trend tracking.</p>
+    <h1>ClippyDo Performance</h1>
+    <p>Performance history from UI tests and benchmarks, visualized for trend tracking.</p>
   </header>
 
   <main>
@@ -310,7 +321,7 @@
     </section>
 
     <section class="card">
-      <h3>Metric focus</h3>
+      <h3>UI metric focus</h3>
       <div class="controls">
         <input id="metric-filter" type="text" placeholder="Filter metrics by scenario or name">
         <select id="sort-mode">
@@ -350,7 +361,7 @@
     </section>
 
     <section class="card">
-      <h3>Scenario metrics</h3>
+      <h3>UI scenario metrics</h3>
       <div class="grid metrics-stack">
         <div class="card">
           <h3>Hot</h3>
@@ -359,15 +370,15 @@
             <tr>
               <th data-sort="scenario" title="User-friendly scenario name. Click to sort alphabetically.">Scenario</th>
               <th data-sort="metric" title="Metric identifier recorded during the test.">Metric</th>
-              <th data-sort="last" title="Most recent recorded duration in milliseconds.">Last (ms)</th>
-              <th data-sort="avg" title="Average duration across all samples in milliseconds.">Avg (ms)</th>
-              <th data-sort="p50" title="Median duration (50th percentile) in milliseconds.">p50 (ms)</th>
-              <th data-sort="p95" title="Slowest 5% boundary (95th percentile) in milliseconds.">p95 (ms)</th>
-              <th data-sort="stdDev" title="Standard deviation in milliseconds.">Std dev (ms)</th>
-              <th data-sort="max" title="Highest recorded duration in milliseconds.">Max (ms)</th>
+              <th data-sort="last" title="Most recent recorded duration.">Last</th>
+              <th data-sort="avg" title="Average duration across all samples.">Avg</th>
+              <th data-sort="p50" title="Median duration (50th percentile).">p50</th>
+              <th data-sort="p95" title="Slowest 5% boundary (95th percentile).">p95</th>
+              <th data-sort="stdDev" title="Standard deviation.">Std dev</th>
+              <th data-sort="max" title="Highest recorded duration.">Max</th>
               <th data-sort="runs" title="Number of samples captured for this metric.">Runs</th>
-              <th data-sort="delta" title="Change between the last two samples in milliseconds.">Delta (ms)</th>
-              <th data-sort="trend" title="Linear trend slope in milliseconds per run.">Trend (ms/run)</th>
+              <th data-sort="delta" title="Change between the last two samples.">Delta</th>
+              <th data-sort="trend" title="Linear trend slope per run.">Trend / run</th>
               <th class="no-sort" title="Recent history sparkline.">History</th>
             </tr>
             </thead>
@@ -383,15 +394,15 @@
             <tr>
               <th data-sort="scenario" title="User-friendly scenario name. Click to sort alphabetically.">Scenario</th>
               <th data-sort="metric" title="Metric identifier recorded during the test.">Metric</th>
-              <th data-sort="last" title="Most recent recorded duration in milliseconds.">Last (ms)</th>
-              <th data-sort="avg" title="Average duration across all samples in milliseconds.">Avg (ms)</th>
-              <th data-sort="p50" title="Median duration (50th percentile) in milliseconds.">p50 (ms)</th>
-              <th data-sort="p95" title="Slowest 5% boundary (95th percentile) in milliseconds.">p95 (ms)</th>
-              <th data-sort="stdDev" title="Standard deviation in milliseconds.">Std dev (ms)</th>
-              <th data-sort="max" title="Highest recorded duration in milliseconds.">Max (ms)</th>
+              <th data-sort="last" title="Most recent recorded duration.">Last</th>
+              <th data-sort="avg" title="Average duration across all samples.">Avg</th>
+              <th data-sort="p50" title="Median duration (50th percentile).">p50</th>
+              <th data-sort="p95" title="Slowest 5% boundary (95th percentile).">p95</th>
+              <th data-sort="stdDev" title="Standard deviation.">Std dev</th>
+              <th data-sort="max" title="Highest recorded duration.">Max</th>
               <th data-sort="runs" title="Number of samples captured for this metric.">Runs</th>
-              <th data-sort="delta" title="Change between the last two samples in milliseconds.">Delta (ms)</th>
-              <th data-sort="trend" title="Linear trend slope in milliseconds per run.">Trend (ms/run)</th>
+              <th data-sort="delta" title="Change between the last two samples.">Delta</th>
+              <th data-sort="trend" title="Linear trend slope per run.">Trend / run</th>
               <th class="no-sort" title="Recent history sparkline.">History</th>
             </tr>
             </thead>
@@ -407,15 +418,15 @@
             <tr>
               <th data-sort="scenario" title="User-friendly scenario name. Click to sort alphabetically.">Scenario</th>
               <th data-sort="metric" title="Metric identifier recorded during the test.">Metric</th>
-              <th data-sort="last" title="Most recent recorded duration in milliseconds.">Last (ms)</th>
-              <th data-sort="avg" title="Average duration across all samples in milliseconds.">Avg (ms)</th>
-              <th data-sort="p50" title="Median duration (50th percentile) in milliseconds.">p50 (ms)</th>
-              <th data-sort="p95" title="Slowest 5% boundary (95th percentile) in milliseconds.">p95 (ms)</th>
-              <th data-sort="stdDev" title="Standard deviation in milliseconds.">Std dev (ms)</th>
-              <th data-sort="max" title="Highest recorded duration in milliseconds.">Max (ms)</th>
+              <th data-sort="last" title="Most recent recorded duration.">Last</th>
+              <th data-sort="avg" title="Average duration across all samples.">Avg</th>
+              <th data-sort="p50" title="Median duration (50th percentile).">p50</th>
+              <th data-sort="p95" title="Slowest 5% boundary (95th percentile).">p95</th>
+              <th data-sort="stdDev" title="Standard deviation.">Std dev</th>
+              <th data-sort="max" title="Highest recorded duration.">Max</th>
               <th data-sort="runs" title="Number of samples captured for this metric.">Runs</th>
-              <th data-sort="delta" title="Change between the last two samples in milliseconds.">Delta (ms)</th>
-              <th data-sort="trend" title="Linear trend slope in milliseconds per run.">Trend (ms/run)</th>
+              <th data-sort="delta" title="Change between the last two samples.">Delta</th>
+              <th data-sort="trend" title="Linear trend slope per run.">Trend / run</th>
               <th class="no-sort" title="Recent history sparkline.">History</th>
             </tr>
             </thead>
@@ -426,6 +437,98 @@
         </div>
       </div>
       <div class="note">p50 is the median. p95 is the 95th percentile (tail latency). Std dev shows dispersion. Trend is a linear regression slope in ms per run.</div>
+    </section>
+
+    <section class="card">
+      <h3>Benchmark metric focus</h3>
+      <div class="controls">
+        <input id="bench-metric-filter" type="text" placeholder="Filter benchmarks by scenario or name">
+        <select id="bench-sort-mode">
+          <option value="last">Sort by last</option>
+          <option value="p50">Sort by p50</option>
+          <option value="p95">Sort by p95</option>
+          <option value="max">Sort by max</option>
+        </select>
+        <select id="bench-metric-selector"></select>
+        <select id="bench-chart-window">
+          <option value="all">All runs</option>
+          <option value="10">Last 10</option>
+          <option value="20">Last 20</option>
+          <option value="50">Last 50</option>
+        </select>
+      </div>
+      <div class="focus-row">
+        <div class="focus-panel">
+          <div class="focus-title">Filter text (DeepSearch off)</div>
+          <div class="chart" id="bench-filter-off-chart">Loading...</div>
+          <div id="bench-filter-off-legend" class="legend"></div>
+        </div>
+        <div class="focus-panel">
+          <div class="focus-title">Filter text (DeepSearch on)</div>
+          <div class="chart" id="bench-filter-on-chart">Loading...</div>
+          <div id="bench-filter-on-legend" class="legend"></div>
+        </div>
+        <div class="focus-panel">
+          <div class="focus-title">Clip operations (DeepSearch off)</div>
+          <div class="chart" id="bench-clip-off-chart">Loading...</div>
+          <div id="bench-clip-off-legend" class="legend"></div>
+        </div>
+        <div class="focus-panel">
+          <div class="focus-title">Clip operations (DeepSearch on)</div>
+          <div class="chart" id="bench-clip-on-chart">Loading...</div>
+          <div id="bench-clip-on-legend" class="legend"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Benchmark scenario metrics</h3>
+      <div class="grid metrics-stack">
+        <div class="card">
+          <h3>All benchmarks</h3>
+          <table id="bench-metrics-table-hot">
+            <thead>
+            <tr>
+              <th data-sort="scenario" title="Benchmark scenario label.">Scenario</th>
+              <th data-sort="metric" title="Metric identifier recorded during the benchmark.">Metric</th>
+              <th data-sort="last" title="Most recent recorded duration.">Last</th>
+              <th data-sort="avg" title="Average duration across all samples.">Avg</th>
+              <th data-sort="p50" title="Median duration (50th percentile).">p50</th>
+              <th data-sort="p95" title="Slowest 5% boundary (95th percentile).">p95</th>
+              <th data-sort="stdDev" title="Standard deviation.">Std dev</th>
+              <th data-sort="max" title="Highest recorded duration.">Max</th>
+              <th data-sort="runs" title="Number of samples captured for this benchmark.">Runs</th>
+              <th data-sort="delta" title="Change between the last two samples.">Delta</th>
+              <th data-sort="trend" title="Linear trend slope per run.">Trend / run</th>
+              <th class="no-sort" title="Recent history sparkline.">History</th>
+            </tr>
+            </thead>
+            <tbody id="bench-metrics-body-hot">
+            <tr><td colspan="12">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="note">Benchmarks are grouped by method; each scenario lists deep search and sizing parameters.</div>
+    </section>
+
+    <section class="card">
+      <h3>DeepSearch comparison</h3>
+      <table id="bench-compare-table">
+        <thead>
+        <tr>
+          <th>Scenario</th>
+          <th>Normal</th>
+          <th>DeepSearch</th>
+          <th>Delta</th>
+          <th>Ratio</th>
+        </tr>
+        </thead>
+        <tbody id="bench-compare-body">
+        <tr><td colspan="5">Loading...</td></tr>
+        </tbody>
+      </table>
+      <div class="note">Compares the latest DeepSearch result vs normal for the same method and sizing parameters.</div>
     </section>
 
     <section class="card">
@@ -499,6 +602,9 @@
     </section>
   </main>
 
+  <script src="data/perf.js" defer></script>
+  <script src="data/benchmarks.js" defer></script>
   <script src="dashboard.js" defer></script>
 </body>
 </html>
+

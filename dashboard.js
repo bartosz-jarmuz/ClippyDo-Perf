@@ -1,5 +1,6 @@
 (function () {
   const state = {
+    allLines: [],
     lines: [],
     groups: [],
     filtered: [],
@@ -12,6 +13,20 @@
     testLines: [],
     testRuns: [],
     testGroups: []
+  };
+
+  const benchState = {
+    lines: [],
+    groups: [],
+    filtered: [],
+    selectedKey: null,
+    highlightedKeys: new Set(),
+    filterOffHighlights: new Set(),
+    filterOnHighlights: new Set(),
+    clipOffHighlights: new Set(),
+    clipOnHighlights: new Set(),
+    chartWindow: 'all',
+    metricSort: { key: 'last', dir: 'desc', source: 'dropdown' }
   };
 
   const elements = {
@@ -64,6 +79,31 @@
     testsErrorsTable: document.getElementById('tests-errors-table')
   };
 
+  const benchElements = {
+    metricFilter: document.getElementById('bench-metric-filter'),
+    sortMode: document.getElementById('bench-sort-mode'),
+    metricSelector: document.getElementById('bench-metric-selector'),
+    chartWindow: document.getElementById('bench-chart-window'),
+    compareBody: document.getElementById('bench-compare-body'),
+    filterOffChart: document.getElementById('bench-filter-off-chart'),
+    filterOnChart: document.getElementById('bench-filter-on-chart'),
+    clipOffChart: document.getElementById('bench-clip-off-chart'),
+    clipOnChart: document.getElementById('bench-clip-on-chart'),
+    filterOffLegend: document.getElementById('bench-filter-off-legend'),
+    filterOnLegend: document.getElementById('bench-filter-on-legend'),
+    clipOffLegend: document.getElementById('bench-clip-off-legend'),
+    clipOnLegend: document.getElementById('bench-clip-on-legend'),
+    focusCharts: {},
+    focusLegends: {},
+    focusMeta: {},
+    metricsBodies: {
+      hot: document.getElementById('bench-metrics-body-hot')
+    },
+    metricsTables: {
+      hot: document.getElementById('bench-metrics-table-hot')
+    }
+  };
+
   const seriesPalette = [
     '#63d0a8',
     '#4fb3ff',
@@ -76,12 +116,70 @@
     '#f472b6'
   ];
 
-  async function loadNdjson(path) {
+  async function loadNdjson(path, sourceTag) {
     const response = await fetch(path, { cache: 'no-store' });
     if (!response.ok) {
       throw new Error(`Missing ${path}`);
     }
     const text = await response.text();
+    return parseNdjson(text, sourceTag);
+  }
+
+  async function loadOptionalNdjson(path, sourceTag) {
+    try {
+      const response = await fetch(path, { cache: 'no-store' });
+      if (!response.ok) {
+        return resolveInlineSamples(sourceTag);
+      }
+      const text = await response.text();
+      return parseNdjson(text, sourceTag);
+    } catch {
+      return resolveInlineSamples(sourceTag);
+    }
+  }
+
+  function resolveInlineSamples(sourceTag) {
+    if (sourceTag === 'benchmarks' && Array.isArray(window.__perfDashboardBenchmarks)) {
+      return parseInlineSamples(window.__perfDashboardBenchmarks, sourceTag);
+    }
+    if (sourceTag === 'ui' && Array.isArray(window.__perfDashboardUi)) {
+      return parseInlineSamples(window.__perfDashboardUi, sourceTag);
+    }
+    return [];
+  }
+
+  function normalizeDuration(value, sourceTag) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return 0;
+    }
+    if (sourceTag === 'benchmarks' && parsed > 1_000_000) {
+      return parsed / 1_000_000;
+    }
+    return parsed;
+  }
+
+  function parseInlineSamples(samples, sourceTag) {
+    return samples
+      .filter(Boolean)
+      .map(sample => ({
+        ...sample,
+        scenario: sample.scenario ?? sample.Scenario,
+        metric: sample.metric ?? sample.Metric,
+        category: sample.category ?? sample.Category,
+        status: sample.status ?? sample.Status,
+        runId: sample.runId ?? sample.RunId,
+        branch: sample.branch ?? sample.Branch,
+        commit: sample.commit ?? sample.Commit,
+        durationMs: normalizeDuration(sample.durationMs ?? sample.DurationMs, sourceTag),
+        timestampUtc: new Date(sample.timestampUtc ?? sample.TimestampUtc),
+        tags: sample.tags ?? sample.Tags ?? [],
+        scenarioDetails: sample.scenarioDetails ?? sample.ScenarioDetails ?? null,
+        source: sample.source ?? sample.Source ?? sourceTag
+      }));
+  }
+
+  function parseNdjson(text, sourceTag) {
     return text
       .split('\n')
       .map(line => line.trim())
@@ -103,8 +201,11 @@
         runId: sample.runId ?? sample.RunId,
         branch: sample.branch ?? sample.Branch,
         commit: sample.commit ?? sample.Commit,
-        durationMs: Number(sample.durationMs ?? sample.DurationMs) || 0,
-        timestampUtc: new Date(sample.timestampUtc ?? sample.TimestampUtc)
+        durationMs: normalizeDuration(sample.durationMs ?? sample.DurationMs, sourceTag),
+        timestampUtc: new Date(sample.timestampUtc ?? sample.TimestampUtc),
+        tags: sample.tags ?? sample.Tags ?? [],
+        scenarioDetails: sample.scenarioDetails ?? sample.ScenarioDetails ?? null,
+        source: sample.source ?? sample.Source ?? sourceTag
       }));
   }
 
@@ -152,8 +253,76 @@
     return humanizeSegment(rawScenario);
   }
 
-  function formatMetricLabel(rawMetric) {
+  function formatScenarioDetails(details, tags) {
+    if (details) {
+      const entries = Object.entries(details)
+        .filter(([key, value]) => value !== null && value !== undefined && key.toLowerCase() !== 'case')
+        .map(([key, value]) => `${humanizeSegment(key)} ${value}`);
+      if (entries.length > 0) {
+        return entries.join(' • ');
+      }
+    }
+
+    if (Array.isArray(tags) && tags.length > 0) {
+      return tags.join(' • ');
+    }
+
+    return '';
+  }
+
+  function formatMetricLabel(rawMetric, source) {
+    if (source === 'benchmarks' && String(rawMetric).toLowerCase() === 'duration') {
+      return 'time';
+    }
     return rawMetric || '';
+  }
+
+  const benchmarkMethodLabels = {
+    AddNewClip_ClipboardToVmUpdateAsync: 'Add new clip',
+    AddExistingClip_ClipboardToVmUpdateAsync: 'Add existing clip',
+    AddFilter_RetagAllClipsAsync: 'Add filter',
+    PasteSelected_MoveToTopAsync: 'Paste selected',
+    FilterText_TypingSlowShortAsync: 'Filter text (short)',
+    FilterText_TypingSlowLongAsync: 'Filter text (long)',
+    FilterText_PasteQueryAsync: 'Filter text (paste)',
+    FilterByImagesAsync: 'Filter by images',
+    FilterByNumbersAsync: 'Filter by numbers',
+    FilterByNotesAsync: 'Filter by notes',
+    FilterByPinnedAsync: 'Filter by pinned',
+    FilterByCustomFilterAsync: 'Filter by custom filter'
+  };
+
+  function getBenchmarkMethodName(line) {
+    if (line.scenarioDetails && line.scenarioDetails.case) {
+      return line.scenarioDetails.case;
+    }
+    const raw = line.scenario || '';
+    const parts = raw.split('.').filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : raw;
+  }
+
+  function getBenchmarkMethodLabel(methodName) {
+    if (benchmarkMethodLabels[methodName]) {
+      return benchmarkMethodLabels[methodName];
+    }
+    const trimmed = methodName.replace(/Async$/i, '');
+    return trimmed.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/\s+/g, ' ').trim();
+  }
+
+  function formatBenchmarkScenarioSuffix(details) {
+    if (!details) {
+      return '';
+    }
+    const parts = [];
+    if (details.DeepSearchEnabled === true) {
+      parts.push('DeepSearch');
+    }
+    return parts.join(' - ');
+  }
+
+  function buildBenchmarkScenarioLabel(methodLabel, details) {
+    const suffix = formatBenchmarkScenarioSuffix(details);
+    return suffix ? `${methodLabel} - ${suffix}` : methodLabel;
   }
 
   function calculateAverage(values) {
@@ -219,14 +388,14 @@
     };
   }
 
-  function getChartWindowCount() {
-    if (state.chartWindow === 'all') return null;
-    const parsed = Number(state.chartWindow);
+  function getChartWindowCount(chartWindow) {
+    if (chartWindow === 'all') return null;
+    const parsed = Number(chartWindow);
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  function sliceSamples(samples) {
-    const count = getChartWindowCount();
+  function sliceSamples(samples, chartWindow) {
+    const count = getChartWindowCount(chartWindow);
     if (!count || samples.length <= count) return samples;
     return samples.slice(samples.length - count);
   }
@@ -343,6 +512,7 @@
       const average = calculateAverage(durations);
       const stdDev = calculateStandardDeviation(durations);
       const trendSlope = calculateTrendSlopePerRun(samples);
+      const detailLine = formatScenarioDetails(last.scenarioDetails, last.tags);
       output.push({
         key,
         scenario: last.scenarioLabel || last.scenario,
@@ -350,7 +520,65 @@
         metric: last.metric,
         category: normalizeCategory(last.category),
         scenarioLabel: formatScenarioLabel(last.scenarioLabel || last.scenario),
-        metricLabel: formatMetricLabel(last.metric),
+        metricLabel: formatMetricLabel(last.metric, last.source),
+        scenarioDetails: detailLine,
+        samples,
+        durations,
+        last,
+        p50: percentile(durations, 50),
+        p95: percentile(durations, 95),
+        average,
+        stdDev,
+        max: durations[durations.length - 1] || 0,
+        delta,
+        trendSlope,
+        color: getColorForKey(key)
+      });
+    });
+
+    return output;
+  }
+
+  function groupSamplesBenchmarks(lines) {
+    const groups = new Map();
+    for (const line of lines) {
+      const methodName = getBenchmarkMethodName(line);
+      const methodLabel = getBenchmarkMethodLabel(methodName);
+      const details = line.scenarioDetails || {};
+      const scenarioLabel = buildBenchmarkScenarioLabel(methodLabel, details);
+      const detailKey = formatBenchmarkScenarioSuffix(details);
+      const key = `${methodName}::${detailKey || 'base'}::${line.metric}`;
+      const values = groups.get(key) || [];
+      values.push({
+        ...line,
+        scenarioKey: methodName,
+        scenarioLabel,
+        methodLabel,
+        scenarioDetailsLabel: detailKey
+      });
+      groups.set(key, values);
+    }
+
+    const output = [];
+    groups.forEach((samples, key) => {
+      samples.sort((a, b) => a.timestampUtc - b.timestampUtc);
+      const durations = samples.map(s => s.durationMs).sort((a, b) => a - b);
+      const last = samples[samples.length - 1];
+      const prev = samples.length > 1 ? samples[samples.length - 2] : null;
+      const delta = prev ? last.durationMs - prev.durationMs : null;
+      const average = calculateAverage(durations);
+      const stdDev = calculateStandardDeviation(durations);
+      const trendSlope = calculateTrendSlopePerRun(samples);
+      output.push({
+        key,
+        scenario: last.scenarioLabel || last.scenario,
+        scenarioRaw: last.scenarioLabel || last.scenario,
+        metric: last.metric,
+        category: normalizeCategory(last.category),
+        scenarioLabel: last.scenarioLabel || last.methodLabel,
+        metricLabel: formatMetricLabel(last.metric, 'benchmarks'),
+        scenarioDetails: last.scenarioDetailsLabel || '',
+        methodLabel: last.methodLabel,
         samples,
         durations,
         last,
@@ -458,7 +686,15 @@
   }
 
   function formatMs(value) {
-    return Math.round(value).toString();
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return '--';
+    if (parsed < 10000) {
+      return `${parsed.toFixed(3)} ms`;
+    }
+    if (parsed < 60000) {
+      return `${(parsed / 1000).toFixed(3)} s`;
+    }
+    return `${(parsed / 60000).toFixed(3)} min`;
   }
 
   function formatPercent(value) {
@@ -567,7 +803,7 @@
             </div>
             <div class="run-time">${when}</div>
           </div>
-          <div class="run-details">p50 ${formatMs(runP50)} ms | ${run.samples.length} samples</div>
+          <div class="run-details">p50 ${formatMs(runP50)} | ${run.samples.length} samples</div>
         </div>
       `;
     }).join('');
@@ -633,7 +869,7 @@
     const axisLabelOffset = 6;
     const axisMarkup = ticks.map(tick => {
       const y = padding + innerHeight - (tick.ratio * innerHeight);
-      const label = `${formatMs(tick.value)} ms`;
+      const label = formatMs(tick.value);
       return `
         <line x1="${padding}" y1="${snap(y)}" x2="${padding + innerWidth}" y2="${snap(y)}" stroke="#1d344b" stroke-width="1" opacity="0.6" />
         <text x="${padding - axisLabelOffset}" y="${snap(y) + 4}" fill="#9ab0c7" font-size="11" text-anchor="end">${label}</text>
@@ -664,7 +900,7 @@
         ${trendMarkup}
         ${points.map(point => `
           <circle cx="${point.x}" cy="${point.y}" r="${entry.isSelected ? 3 : 2}" fill="${entry.color}" opacity="${opacity}">
-            <title>${formatMs(point.value)} ms</title>
+            <title>${formatMs(point.value)}</title>
           </circle>
         `).join('')}
       `;
@@ -735,10 +971,10 @@
     `;
   }
 
-  function renderFocusChartForCategory(groups, selectedKey, category) {
-    const chart = elements.focusCharts[category];
-    const legend = elements.focusLegends[category];
-    const meta = elements.focusMeta[category];
+  function renderFocusChartForCategory(groups, selectedKey, category, focusElements, viewState) {
+    const chart = focusElements.focusCharts[category];
+    const legend = focusElements.focusLegends[category];
+    const meta = focusElements.focusMeta[category];
     const categoryGroups = groups.filter(group => group.category === category);
     let targetGroups = categoryGroups.slice(0, 6);
 
@@ -754,14 +990,17 @@
       targetGroups = [...targetGroups.slice(0, Math.max(0, targetGroups.length - 1)), selectedGroup];
     }
 
-    const hasHighlights = state.highlightedKeys.size > 0;
+    const hasHighlights = viewState.highlightedKeys.size > 0;
     const series = targetGroups.map(group => {
-      const isHighlighted = state.highlightedKeys.has(group.key);
+      const isHighlighted = viewState.highlightedKeys.has(group.key);
       const opacity = hasHighlights && !isHighlighted ? 0.15 : 1;
+      const label = viewState === benchState
+        ? group.scenarioLabel
+        : `${group.scenarioLabel} / ${group.metricLabel}`;
       return {
         key: group.key,
-        label: `${group.scenarioLabel} / ${group.metricLabel}`,
-        samples: sliceSamples(group.samples),
+        label,
+        samples: sliceSamples(group.samples, viewState.chartWindow),
         color: group.color,
         isSelected: group.key === selectedKey,
         isHighlighted,
@@ -772,11 +1011,15 @@
     chart.innerHTML = createMultiLineChart(series, 800, 260);
 
     const fallbackSelected = hasHighlights
-      ? targetGroups.find(group => state.highlightedKeys.has(group.key)) || targetGroups[0]
+      ? targetGroups.find(group => viewState.highlightedKeys.has(group.key)) || targetGroups[0]
       : targetGroups[0];
     const selected = selectedGroup || fallbackSelected;
-    const slopeText = selected.trendSlope === null ? '--' : `${selected.trendSlope > 0 ? '+' : ''}${formatMs(selected.trendSlope)} ms/run`;
-    meta.textContent = `${selected.scenarioLabel} / ${selected.metricLabel} | last ${formatMs(selected.last.durationMs)} ms | avg ${formatMs(selected.average)} ms | p50 ${formatMs(selected.p50)} ms | p95 ${formatMs(selected.p95)} ms | std dev ${formatMs(selected.stdDev)} ms | trend ${slopeText}`;
+    const slopeText = selected.trendSlope === null ? '--' : `${selected.trendSlope > 0 ? '+' : ''}${formatMs(selected.trendSlope)}/run`;
+    const detailsSuffix = viewState === benchState ? '' : (selected.scenarioDetails ? ` | ${selected.scenarioDetails}` : '');
+    const baseLabel = viewState === benchState
+      ? selected.scenarioLabel
+      : `${selected.scenarioLabel} / ${selected.metricLabel}`;
+    meta.textContent = `${baseLabel}${detailsSuffix} | last ${formatMs(selected.last.durationMs)} | avg ${formatMs(selected.average)} | p50 ${formatMs(selected.p50)} | p95 ${formatMs(selected.p95)} | std dev ${formatMs(selected.stdDev)} | trend ${slopeText}`;
 
     legend.innerHTML = series.map(entry => `
       <div class="legend-item" data-key="${entry.key}" style="opacity:${entry.opacity}">
@@ -786,13 +1029,13 @@
     `).join('');
   }
 
-  function renderFocusCharts(groups, selectedKey) {
-    renderFocusChartForCategory(groups, selectedKey, 'hot');
-    renderFocusChartForCategory(groups, selectedKey, 'medium');
-    renderFocusChartForCategory(groups, selectedKey, 'cold');
+  function renderFocusCharts(groups, selectedKey, focusElements, viewState) {
+    renderFocusChartForCategory(groups, selectedKey, 'hot', focusElements, viewState);
+    renderFocusChartForCategory(groups, selectedKey, 'medium', focusElements, viewState);
+    renderFocusChartForCategory(groups, selectedKey, 'cold', focusElements, viewState);
   }
 
-  function renderTable(groups, body) {
+  function renderTable(groups, body, viewState, focusElements, selectorElement) {
     body.innerHTML = '';
 
     if (groups.length === 0) {
@@ -806,9 +1049,10 @@
       const deltaClass = delta === null ? 'muted' : delta > 0 ? 'delta-up' : 'delta-down';
       const slopeText = group.trendSlope === null ? '--' : `${group.trendSlope > 0 ? '+' : ''}${formatMs(group.trendSlope)}`;
       const slopeClass = group.trendSlope === null ? 'muted' : group.trendSlope > 0 ? 'delta-up' : 'delta-down';
+      const detailLine = group.scenarioDetails ? `<small>${group.scenarioDetails}</small>` : '';
       const row = document.createElement('tr');
       row.innerHTML = `
-        <td><span class="metric"><span class="legend-swatch" style="background:${group.color}"></span>${group.scenarioLabel}</span></td>
+        <td><span class="metric"><span class="legend-swatch" style="background:${group.color}"></span>${group.scenarioLabel}${detailLine}</span></td>
         <td>${group.metricLabel}</td>
         <td>${formatMs(group.last.durationMs)}</td>
         <td>${formatMs(group.average)}</td>
@@ -822,11 +1066,67 @@
         <td>${createSparklineWithColor(group.samples, 120, 40, group.color)}</td>
       `;
       row.addEventListener('click', () => {
-        elements.metricSelector.value = group.key;
-        state.selectedKey = group.key;
-        state.highlightedKeys.clear();
-        state.highlightedKeys.add(group.key);
-        renderFocusCharts(state.filtered, group.key);
+        selectorElement.value = group.key;
+        viewState.selectedKey = group.key;
+        viewState.highlightedKeys.clear();
+        viewState.highlightedKeys.add(group.key);
+        renderFocusCharts(viewState.filtered, group.key, focusElements, viewState);
+      });
+      body.appendChild(row);
+    }
+  }
+
+  function renderBenchmarkTable(groups, body, viewState, focusElements, selectorElement) {
+    body.innerHTML = '';
+
+    if (groups.length === 0) {
+      body.innerHTML = '<tr><td colspan="12">No data</td></tr>';
+      return;
+    }
+
+    const sorted = [...groups].sort((a, b) => {
+      const methodCompare = a.methodLabel.localeCompare(b.methodLabel);
+      if (methodCompare !== 0) return methodCompare;
+      return (a.scenarioDetails || '').localeCompare(b.scenarioDetails || '');
+    });
+
+    let lastMethod = null;
+    for (const group of sorted) {
+      if (group.methodLabel !== lastMethod) {
+        const headerRow = document.createElement('tr');
+        headerRow.className = 'group-row';
+        headerRow.innerHTML = `<td colspan="12"><strong>${group.methodLabel}</strong></td>`;
+        body.appendChild(headerRow);
+        lastMethod = group.methodLabel;
+      }
+
+      const scenarioText = group.scenarioLabel;
+      const delta = group.delta;
+      const deltaText = delta === null ? '--' : `${delta > 0 ? '+' : ''}${formatMs(delta)}`;
+      const deltaClass = delta === null ? 'muted' : delta > 0 ? 'delta-up' : 'delta-down';
+      const slopeText = group.trendSlope === null ? '--' : `${group.trendSlope > 0 ? '+' : ''}${formatMs(group.trendSlope)}`;
+      const slopeClass = group.trendSlope === null ? 'muted' : group.trendSlope > 0 ? 'delta-up' : 'delta-down';
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td><span class="metric"><span class="legend-swatch" style="background:${group.color}"></span>${scenarioText}</span></td>
+        <td>${group.metricLabel}</td>
+        <td>${formatMs(group.last.durationMs)}</td>
+        <td>${formatMs(group.average)}</td>
+        <td>${formatMs(group.p50)}</td>
+        <td>${formatMs(group.p95)}</td>
+        <td>${formatMs(group.stdDev)}</td>
+        <td>${formatMs(group.max)}</td>
+        <td>${group.samples.length}</td>
+        <td class="${deltaClass}">${deltaText}</td>
+        <td class="${slopeClass}">${slopeText}</td>
+        <td>${createSparklineWithColor(group.samples, 120, 40, group.color)}</td>
+      `;
+      row.addEventListener('click', () => {
+        selectorElement.value = group.key;
+        viewState.selectedKey = group.key;
+        viewState.highlightedKeys.clear();
+        viewState.highlightedKeys.add(group.key);
+        renderFocusCharts(viewState.filtered, group.key, focusElements, viewState);
       });
       body.appendChild(row);
     }
@@ -835,13 +1135,15 @@
   function applyFilters() {
     const term = elements.metricFilter.value.trim().toLowerCase();
     let filtered = state.groups;
+    const sourceLines = state.lines;
 
     if (term) {
       filtered = filtered.filter(group =>
         group.scenarioLabel.toLowerCase().includes(term) ||
         group.metricLabel.toLowerCase().includes(term) ||
         group.scenario.toLowerCase().includes(term) ||
-        group.metric.toLowerCase().includes(term));
+        group.metric.toLowerCase().includes(term) ||
+        (group.scenarioDetails || '').toLowerCase().includes(term));
     }
 
     const sortKey = state.metricSort.key;
@@ -853,10 +1155,12 @@
     });
 
     state.filtered = sorted;
-    renderTable(sorted.filter(group => group.category === 'hot'), elements.metricsBodies.hot);
-    renderTable(sorted.filter(group => group.category === 'medium'), elements.metricsBodies.medium);
-    renderTable(sorted.filter(group => group.category === 'cold'), elements.metricsBodies.cold);
-    renderMetricSelector(sorted);
+    renderTable(sorted.filter(group => group.category === 'hot'), elements.metricsBodies.hot, state, elements, elements.metricSelector);
+    renderTable(sorted.filter(group => group.category === 'medium'), elements.metricsBodies.medium, state, elements, elements.metricSelector);
+    renderTable(sorted.filter(group => group.category === 'cold'), elements.metricsBodies.cold, state, elements, elements.metricSelector);
+    renderMetricSelector(sorted, elements.metricSelector, state.selectedKey);
+    renderSummary(sourceLines, sorted);
+    renderLatestRun(sourceLines, state.testLines);
 
     if (!state.selectedKey && sorted.length > 0) {
       state.selectedKey = sorted[0].key;
@@ -864,21 +1168,180 @@
 
     const selected = sorted.find(group => group.key === state.selectedKey) || sorted[0];
     state.selectedKey = selected ? selected.key : null;
-    renderFocusCharts(sorted, state.selectedKey);
+    renderFocusCharts(sorted, state.selectedKey, elements, state);
   }
 
-  function renderMetricSelector(groups) {
-    const selector = elements.metricSelector;
+  function applyBenchmarkFilters() {
+    const term = benchElements.metricFilter.value.trim().toLowerCase();
+    let filtered = benchState.groups;
+
+    if (term) {
+      filtered = filtered.filter(group =>
+        group.scenarioLabel.toLowerCase().includes(term) ||
+        group.metricLabel.toLowerCase().includes(term) ||
+        group.scenario.toLowerCase().includes(term) ||
+        group.metric.toLowerCase().includes(term) ||
+        (group.scenarioDetails || '').toLowerCase().includes(term));
+    }
+
+    const sortKey = benchState.metricSort.key;
+    const sortDir = benchState.metricSort.dir;
+    const sorted = [...filtered].sort((a, b) => {
+      const aValue = getMetricSortValue(a, sortKey);
+      const bValue = getMetricSortValue(b, sortKey);
+      return compareSortValues(aValue, bValue, sortDir);
+    });
+
+    benchState.filtered = sorted;
+    renderBenchmarkTable(sorted, benchElements.metricsBodies.hot, benchState, benchElements, benchElements.metricSelector);
+    renderMetricSelector(sorted, benchElements.metricSelector, benchState.selectedKey, group => group.scenarioLabel);
+
+    if (!benchState.selectedKey && sorted.length > 0) {
+      benchState.selectedKey = sorted[0].key;
+    }
+
+    const selected = sorted.find(group => group.key === benchState.selectedKey) || sorted[0];
+    benchState.selectedKey = selected ? selected.key : null;
+  }
+
+  function renderBenchmarkSeries(targetChart, legendContainer, seriesGroups, highlightSet) {
+    if (!targetChart) {
+      return;
+    }
+    if (!seriesGroups || seriesGroups.length === 0) {
+      targetChart.innerHTML = '<div class="muted">No data</div>';
+      if (legendContainer) {
+        legendContainer.innerHTML = '';
+      }
+      return;
+    }
+
+    const hasHighlights = highlightSet.size > 0;
+    const series = seriesGroups.map(group => {
+      const isHighlighted = highlightSet.has(group.key);
+      const opacity = hasHighlights && !isHighlighted ? 0.15 : 1;
+      return {
+        key: group.key,
+        label: group.scenarioLabel,
+        samples: sliceSamples(group.samples, benchState.chartWindow),
+        color: group.color,
+        isSelected: false,
+        isHighlighted,
+        opacity
+      };
+    });
+
+    targetChart.innerHTML = createMultiLineChart(series, 800, 260);
+    if (legendContainer) {
+      legendContainer.innerHTML = series.map(entry => `
+        <div class="legend-item" data-key="${entry.key}" style="opacity:${entry.opacity}">
+          <span class="legend-swatch" style="background:${entry.color}"></span>
+          <span>${entry.label}</span>
+        </div>
+      `).join('');
+    }
+  }
+
+  function renderBenchmarkCharts(groups) {
+    const filters = groups.filter(group =>
+      group.methodLabel.toLowerCase().includes('filter')
+      && group.methodLabel.toLowerCase() !== 'add filter');
+    const clips = groups.filter(group =>
+      group.methodLabel.toLowerCase().includes('add new clip')
+      || group.methodLabel.toLowerCase().includes('add existing clip')
+      || group.methodLabel.toLowerCase().includes('paste selected'));
+
+    const filterOff = filters.filter(group => !group.scenarioLabel.toLowerCase().includes('deepsearch'));
+    const filterOn = filters.filter(group => group.scenarioLabel.toLowerCase().includes('deepsearch'));
+    const clipOff = clips.filter(group => !group.scenarioLabel.toLowerCase().includes('deepsearch'));
+    const clipOn = clips.filter(group => group.scenarioLabel.toLowerCase().includes('deepsearch'));
+
+    renderBenchmarkSeries(benchElements.filterOffChart, benchElements.filterOffLegend, filterOff, benchState.filterOffHighlights);
+    renderBenchmarkSeries(benchElements.filterOnChart, benchElements.filterOnLegend, filterOn, benchState.filterOnHighlights);
+    renderBenchmarkSeries(benchElements.clipOffChart, benchElements.clipOffLegend, clipOff, benchState.clipOffHighlights);
+    renderBenchmarkSeries(benchElements.clipOnChart, benchElements.clipOnLegend, clipOn, benchState.clipOnHighlights);
+  }
+
+  function buildBenchmarkComparison(lines) {
+    const groups = new Map();
+    for (const line of lines) {
+      const details = line.scenarioDetails || {};
+      const methodName = getBenchmarkMethodName(line);
+      const methodLabel = getBenchmarkMethodLabel(methodName);
+      const recent = details.RecentItems || 0;
+      const db = details.DatabaseSize || 0;
+      const key = `${methodName}::${recent}::${db}`;
+      const list = groups.get(key) || [];
+      list.push({
+        line,
+        methodLabel,
+        recent,
+        db,
+        deepSearch: details.DeepSearchEnabled === true
+      });
+      groups.set(key, list);
+    }
+
+    const comparisons = [];
+    groups.forEach(list => {
+      const normal = list
+        .filter(item => !item.deepSearch)
+        .sort((a, b) => b.line.timestampUtc - a.line.timestampUtc)[0];
+      const deep = list
+        .filter(item => item.deepSearch)
+        .sort((a, b) => b.line.timestampUtc - a.line.timestampUtc)[0];
+      if (!normal && !deep) {
+        return;
+      }
+      const sample = normal || deep;
+      const scenario = `${sample.methodLabel} - r${sample.recent} - db${sample.db}`;
+      const normalValue = normal?.line.durationMs ?? null;
+      const deepValue = deep?.line.durationMs ?? null;
+      const delta = normalValue !== null && deepValue !== null ? deepValue - normalValue : null;
+      const ratio = normalValue && deepValue ? deepValue / normalValue : null;
+      comparisons.push({ scenario, normalValue, deepValue, delta, ratio });
+    });
+
+    return comparisons.sort((a, b) => a.scenario.localeCompare(b.scenario));
+  }
+
+  function renderBenchmarkComparison(lines) {
+    const body = benchElements.compareBody;
+    body.innerHTML = '';
+    const comparisons = buildBenchmarkComparison(lines);
+    if (comparisons.length === 0) {
+      body.innerHTML = '<tr><td colspan="5">No data</td></tr>';
+      return;
+    }
+
+    for (const entry of comparisons) {
+      const normalText = entry.normalValue === null ? '--' : formatMs(entry.normalValue);
+      const deepText = entry.deepValue === null ? '--' : formatMs(entry.deepValue);
+      const deltaText = entry.delta === null ? '--' : `${entry.delta > 0 ? '+' : ''}${formatMs(entry.delta)}`;
+      const ratioText = entry.ratio === null ? '--' : `${entry.ratio.toFixed(2)}x`;
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${entry.scenario}</td>
+        <td>${normalText}</td>
+        <td>${deepText}</td>
+        <td>${deltaText}</td>
+        <td>${ratioText}</td>
+      `;
+      body.appendChild(row);
+    }
+  }
+
+  function renderMetricSelector(groups, selector, selectedKey, labelFormatter) {
     selector.innerHTML = '';
     for (const group of groups) {
       const option = document.createElement('option');
       option.value = group.key;
-      option.textContent = `${group.scenarioLabel} / ${group.metricLabel}`;
+      option.textContent = labelFormatter ? labelFormatter(group) : `${group.scenarioLabel} / ${group.metricLabel}`;
       selector.appendChild(option);
     }
 
-    if (state.selectedKey) {
-      selector.value = state.selectedKey;
+    if (selectedKey) {
+      selector.value = selectedKey;
     }
   }
 
@@ -1007,6 +1470,24 @@
       });
     });
 
+    Object.values(benchElements.metricsTables).forEach(table => {
+      if (!table) {
+        return;
+      }
+      attachSortHandlers(table, key => {
+        const sameKey = benchState.metricSort.key === key;
+        benchState.metricSort = {
+          key,
+          dir: sameKey ? (benchState.metricSort.dir === 'asc' ? 'desc' : 'asc') : defaultSortDir(key),
+          source: 'header'
+        };
+        if (['last', 'p50', 'p95', 'max'].includes(key)) {
+          benchElements.sortMode.value = key;
+        }
+        applyBenchmarkFilters();
+      });
+    });
+
     attachSortHandlers(elements.testsFlakyTable, key => {
       const sameKey = state.flakySort.key === key;
       state.flakySort = {
@@ -1029,14 +1510,45 @@
 
   async function init() {
     try {
-      state.lines = await loadNdjson('data/perf.ndjson');
+      const perfLines = await loadOptionalNdjson('data/perf.ndjson', 'ui');
+      const benchmarkLines = await loadOptionalNdjson('data/benchmarks.ndjson', 'benchmarks');
+      const legacyBenchmarks = benchmarkLines.length === 0
+        ? await loadOptionalNdjson('benchmarks.ndjson', 'benchmarks')
+        : [];
+      state.lines = [...perfLines];
+      benchState.lines = [...benchmarkLines, ...legacyBenchmarks];
+      state.allLines = [...state.lines, ...benchState.lines];
+
       if (state.lines.length === 0) {
-        throw new Error('No perf data yet.');
+        elements.latestRunList.innerHTML = '<div class="muted">No UI perf data yet.</div>';
+        Object.values(elements.metricsBodies).forEach(body => {
+          body.innerHTML = '<tr><td colspan="12">No data</td></tr>';
+        });
+        Object.values(elements.focusCharts).forEach(chart => {
+          chart.innerHTML = '<div class="muted">No data</div>';
+        });
+      } else {
+        state.groups = groupSamples(state.lines);
+        renderLatestRun(state.lines, state.testLines);
+        renderSummary(state.lines, state.groups);
+        applyFilters();
       }
-      state.groups = groupSamples(state.lines);
-      renderLatestRun(state.lines, state.testLines);
-      renderSummary(state.lines, state.groups);
-      applyFilters();
+
+      if (benchState.lines.length === 0) {
+        Object.values(benchElements.metricsBodies).forEach(body => {
+          if (body) {
+            body.innerHTML = '<tr><td colspan="12">No data</td></tr>';
+          }
+        });
+        if (benchElements.compareBody) {
+          benchElements.compareBody.innerHTML = '<tr><td colspan="5">No data</td></tr>';
+        }
+      } else {
+        benchState.groups = groupSamplesBenchmarks(benchState.lines);
+        applyBenchmarkFilters();
+        renderBenchmarkCharts(benchState.groups);
+        renderBenchmarkComparison(benchState.lines);
+      }
     } catch (err) {
       elements.latestRunList.innerHTML = `<div class="muted">${err.message}</div>`;
       Object.values(elements.metricsBodies).forEach(body => {
@@ -1045,6 +1557,14 @@
       Object.values(elements.focusCharts).forEach(chart => {
         chart.innerHTML = '<div class="muted">No data</div>';
       });
+      Object.values(benchElements.metricsBodies).forEach(body => {
+        if (body) {
+          body.innerHTML = '<tr><td colspan="12">No data</td></tr>';
+        }
+      });
+      if (benchElements.compareBody) {
+        benchElements.compareBody.innerHTML = '<tr><td colspan="5">No data</td></tr>';
+      }
     }
 
     try {
@@ -1077,11 +1597,11 @@
   elements.metricSelector.addEventListener('change', () => {
     state.selectedKey = elements.metricSelector.value;
     const selected = state.groups.find(group => group.key === state.selectedKey);
-    renderFocusCharts(state.filtered, selected ? selected.key : null);
+    renderFocusCharts(state.filtered, selected ? selected.key : null, elements, state);
   });
   elements.chartWindow.addEventListener('change', () => {
     state.chartWindow = elements.chartWindow.value;
-    renderFocusCharts(state.filtered, state.selectedKey);
+    renderFocusCharts(state.filtered, state.selectedKey, elements, state);
   });
   Object.values(elements.focusLegends).forEach(legend => {
     legend.addEventListener('click', event => {
@@ -1094,11 +1614,52 @@
       } else {
         state.highlightedKeys.add(key);
       }
-      renderFocusCharts(state.filtered, state.selectedKey);
+      renderFocusCharts(state.filtered, state.selectedKey, elements, state);
     });
   });
 
+  benchElements.metricFilter.addEventListener('input', applyBenchmarkFilters);
+  benchElements.sortMode.addEventListener('change', () => {
+    benchState.metricSort = { key: benchElements.sortMode.value, dir: 'desc', source: 'dropdown' };
+    applyBenchmarkFilters();
+  });
+  benchElements.metricSelector.addEventListener('change', () => {
+    benchState.selectedKey = benchElements.metricSelector.value;
+  });
+  benchElements.chartWindow.addEventListener('change', () => {
+    benchState.chartWindow = benchElements.chartWindow.value;
+    renderBenchmarkCharts(benchState.groups);
+  });
+
+  [benchElements.filterOffLegend, benchElements.filterOnLegend, benchElements.clipOffLegend, benchElements.clipOnLegend]
+    .filter(Boolean)
+    .forEach(legend => {
+      legend.addEventListener('click', event => {
+        const target = event.target.closest('.legend-item');
+        if (!target) return;
+        const key = target.dataset.key;
+        if (!key) return;
+        const map = new Map([
+          [benchElements.filterOffLegend, benchState.filterOffHighlights],
+          [benchElements.filterOnLegend, benchState.filterOnHighlights],
+          [benchElements.clipOffLegend, benchState.clipOffHighlights],
+          [benchElements.clipOnLegend, benchState.clipOnHighlights]
+        ]);
+        const highlightSet = map.get(legend);
+        if (!highlightSet) {
+          return;
+        }
+        if (highlightSet.has(key)) {
+          highlightSet.delete(key);
+        } else {
+          highlightSet.add(key);
+        }
+        renderBenchmarkCharts(benchState.groups);
+      });
+    });
+
   state.metricSort = { key: elements.sortMode.value, dir: 'desc', source: 'dropdown' };
+  benchState.metricSort = { key: benchElements.sortMode.value, dir: 'desc', source: 'dropdown' };
   initSortableTables();
   init();
 })();
